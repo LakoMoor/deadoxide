@@ -173,3 +173,9 @@ Hypothesis (unverified): trees and some groundcover are drawn by the real game t
 `node tools/classdump.mjs ../projectzomboid.jar zombie/characters/IsoZombie [filter]` parses the class's constant pool and lists fields (with ConstantValue) and method names; no decompiler needed and no code copied.
 Read: vision radius 10 (min) to 20 (max) tiles with penalties fog 7, rain 2.5, darkness 5; unseen hearing offset 2 / 5 (heavy rain) / 10; lunge time 180; eat body distance 1, time 3600; crawler damage range 1.5; speed types sprinter/fast shambler/shambler/random; hearing types pinpoint/normal/poor.
 Now in `sim::iso_zombie_constants` (not used by the simulation). The sim's `chase within 12 tiles, speed 1.2` stays PLACEHOLDER: the real combination of these values and the movement speeds (which live in animation data, not in these constants) are unmeasured. Next measurement would be bytecode of `IsoZombie.updateInternal` or an oracle capture of a zombie crossing known tiles.
+
+### `classdump --code` : what the zombie walk/lunge methods touch (bytecode order, NOT decompiled)
+
+`node tools/classdump.mjs ../projectzomboid.jar zombie/characters/IsoZombie x --code getZombieWalkTowardSpeed` lists constants, field accesses and calls in order; branches and stack are not interpreted.
+`getZombieWalkTowardSpeed(float,float,Vector2)` loads 1.3 twice, `getSpeedMod()`, 0.006 then `Vector2.setLength`, reads `SandboxOptions.lore.speed`, `inactive`, `speedType`, loads 0.08, calls `setLength` again, writes `running`, and ends with `getLength()`/`setLength`. `getZombieLungeSpeed()` reads the same sandbox speed and `speedType` and writes `running` (no float constants).
+Facts: the numbers 0.006 and 0.08 are the only per-tick vector lengths the method uses. UNKNOWN: which one applies to which speed type, how 1.3 and `getSpeedMod()` enter, and the tick-to-tile scale. The sim keeps its PLACEHOLDER speed until this is read with branch structure or measured on a real zombie.
