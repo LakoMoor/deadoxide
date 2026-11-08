@@ -226,3 +226,8 @@ Plain-text per-variant animation name and `m_SpeedScale` (blank = not set in the
 | zombieWalkSlow1 | Zombie_Walk5 |  |
 | zombieWalkSlow2 | Zombie_Walk2 | 0.64 |
 | zombieWalkSlow3 | Zombie_Walk5 | 0.72 |
+
+## FMOD banks (audio) — first look, nothing decoded
+
+`media/sound/banks/Desktop/`: ZomboidSound.bank (647 MB), ZomboidMusic.bank (667 MB), ZomboidSoundMP.bank (40 MB), radio.bank (9 MB), ZomboidSound.strings.bank (171 KB).
+The strings bank is a RIFF container, form type `FEV `, with two chunks: `FMT ` (8 bytes) and one `LIST` (171192 bytes) that holds typed sub-lists (`PROJBNKI`, `IBSSLIST`, `GBSSLIST`, `EVTSLIST`, `VCASLIST`, `PRMSLIST`, ...). Path-like names such as `/Zombie`, `/ZombieClaw`, `/Reverb`, `/Locks` are present. A naive search for `event:/` finds nothing, so the event names are stored per sub-list, not as one string. No event table or audio stream is decoded; the audio area stays 0%.
