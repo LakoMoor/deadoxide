@@ -197,3 +197,32 @@ Resolved: constants 24, 1.0, 1.3, 0.006, 0.08 and the branch conditions (pc 62 `
 
 `node tools/jargrep.mjs ../projectzomboid.jar getZombieWalkTowardSpeed` finds the name only in `zombie/characters/IsoZombie` itself, and no method of IsoZombie calls it. No class in the jar references it (a Lua call would need a binding, none found by name). So the formula read above is most likely unused in 42.21.0 and must NOT be taken as the zombie movement speed. By contrast `getZombieLungeSpeed` is referenced by `zombie/ai/states/LungeState`. Real walking speed is probably driven by the animation/walk type (`walkType`, `speedType`); that path is not read yet.
 Tools: `tools/jargrep.mjs <jar> <string>` lists classes whose constant pool contains the string.
+
+## Zombie walk animation sets (media/AnimSets/zombie/walktoward) — measured file facts
+
+Plain-text per-variant animation name and `m_SpeedScale` (blank = not set in the file). The distance moved per animation cycle (root motion) is stored in the model animation files, NOT read yet, so tiles/second stays UNKNOWN.
+
+| variant | m_AnimName | m_SpeedScale |
+|---|---|---|
+| defaultWalktoward |  | 0.80 |
+| inTrees | Zombie_WalkTrees | 0.80 |
+| slow |  | 0.80 |
+| sprint1 | Zombie_Sprint |  |
+| sprint2 | Zombie_Sprint02 |  |
+| sprint3 | Zombie_Sprint03 |  |
+| sprint4 | Zombie_Sprint05 |  |
+| sprint5 | Zombie_Sprint |  |
+| sprintToward |  | 0.80 |
+| sprintWalk1 | Zombie_Walk | 0.92 |
+| sprintWalk2 | Zombie_Walk2 | 1.04 |
+| sprintWalk3 | Zombie_Walk3 |  |
+| sprintWalk4 | Zombie_Walk4 | 0.60 |
+| sprintWalk5 | Zombie_Walk3 | 0.92 |
+| walktoward1 | Zombie_Walk | 0.92 |
+| walktoward2 | Zombie_Walk2 | 1.04 |
+| walktoward3 | Zombie_Walk3 |  |
+| walktoward4 | Zombie_Walk4 | 0.60 |
+| walktoward5 | Zombie_Walk3 | 0.92 |
+| zombieWalkSlow1 | Zombie_Walk5 |  |
+| zombieWalkSlow2 | Zombie_Walk2 | 0.64 |
+| zombieWalkSlow3 | Zombie_Walk5 | 0.72 |
