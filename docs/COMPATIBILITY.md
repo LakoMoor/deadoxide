@@ -315,3 +315,11 @@ Found by ranking all 2158 functions by float-instruction count and decompiling t
 - MEASURED: for each (light, square) it runs the per-light function above; each channel is clamped to 255 (a byte), then stored per channel as the MAX of what the square already holds (red at +0xc, green +0xd, blue +0xe of the square's light-cache record). Lights are NOT summed here. It skips a light when the square was already visited by this light with a path distance not larger than the new one.
 - MEASURED: it then pushes the light's id, position, the three clamped channels divided by 255 and the distance into a per-square light list (`FUN_18000c100`), which is the up-to-5-entry list `getSquareLighting` returns; Java sees both the max colour and that list.
 - UNKNOWN: how Java turns the max colour and the list into vertex colours (`getVertLight`), the night ambient (`getDarkMulti`), and which lights exist in the oracle frames.
+
+### Getters: getLightInfo, getVertLight, getDarkMulti (read by hand)
+
+- MEASURED: all three only read precomputed per-square arrays after bounds checks (`playerIndex < 4`, else `IllegalArgumentException: invalid playerIndex`; null state gives `IllegalStateException: state is null`; out-of-grid squares return 0).
+- `getLightInfo(player, x, y, z, 0|1|2)`: returns the stored max colour byte for red, green or blue divided by 255. This is the MAX-combined colour from the section above.
+- `getVertLight(player, x, y, z, vertex 0..7)`: returns one packed 32-bit colour per square per vertex (8 vertices per square, matching the 8 corner lights Java asks for). Computed elsewhere in the update pass; not read yet.
+- `getDarkMulti(player, x, y, z)`: returns a stored 32-bit value per square (the array `getSquareLighting` also exposes, scaled by a double). Where it is written is UNKNOWN.
+- Consequence: the remaining numeric work is the writer of the vertex-light and dark-multiplier arrays inside `FUN_180009c30` (0x180009c30, 952 instructions) and the helpers it calls (`FUN_180003970`, `FUN_180004800` are the next float-heavy callees).
