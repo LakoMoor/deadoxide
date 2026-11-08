@@ -274,3 +274,10 @@ Whole-frame mean|luma diff| of 255 (position 0 and 1 from run 3, 1710x1074; fram
 | 10 | 18.97 | 31.39 | 12.19 |
 
 It helps two frames (the real game does reveal squares beyond the room) and hurts position 1: at radius 10 the port also draws the bathroom/bedroom to the west, the opaque south exterior wall and a lot of grass, none of which the real frame shows (checked by eye in `tests/out/l1_10.png`). So line of sight alone is not the rule: missing pieces are the cutaway of camera-facing walls, a vision cone/light limit (night: only lit squares are drawn) and probably the facing direction. The flag stays OFF by default; do not quote 12.19 as a result, the three-frame mean (23.45 -> 20.85 at radius 10) hides a regression.
+
+## Native lighting (Lighting64.dll): blocked
+
+- MEASURED: `zombie.iso.LightingJNI` loads `System.loadLibrary("Lighting")`; `Lighting64.dll` (x86_64 PE, sha256 1866188d8e253de521ba208f06f1db9b9019f333162ff3c31dd83506fafee773) sits in the game root.
+- BLOCKED: REA `open_binary` succeeds, but every analysis call fails with `provider_unavailable`: Ghidra is configured at `E:\tools\ghidra_12.1.4_PUBLIC` and that folder has no `application.properties`/`analyzeHeadless.bat` (the install is missing or incomplete). Hopper, IDA and Kuna are not usable on this host.
+- UNKNOWN: the light falloff, colour and room-light model. Nothing was read from the DLL.
+- To unblock: install a full Ghidra release and point `GHIDRA_INSTALL_DIR` at it.
