@@ -179,3 +179,16 @@ Now in `sim::iso_zombie_constants` (not used by the simulation). The sim's `chas
 `node tools/classdump.mjs ../projectzomboid.jar zombie/characters/IsoZombie x --code getZombieWalkTowardSpeed` lists constants, field accesses and calls in order; branches and stack are not interpreted.
 `getZombieWalkTowardSpeed(float,float,Vector2)` loads 1.3 twice, `getSpeedMod()`, 0.006 then `Vector2.setLength`, reads `SandboxOptions.lore.speed`, `inactive`, `speedType`, loads 0.08, calls `setLength` again, writes `running`, and ends with `getLength()`/`setLength`. `getZombieLungeSpeed()` reads the same sandbox speed and `speedType` and writes `running` (no float constants).
 Facts: the numbers 0.006 and 0.08 are the only per-tick vector lengths the method uses. UNKNOWN: which one applies to which speed type, how 1.3 and `getSpeedMod()` enter, and the tick-to-tile scale. The sim keeps its PLACEHOLDER speed until this is read with branch structure or measured on a real zombie.
+
+### `getZombieWalkTowardSpeed` read by hand from the bytecode (`--hex`, `--cp`) — medium confidence
+
+Branch offsets resolved by hand against the JVMS opcode table (109 bytes, pc 0..108). With `a1` = float arg 1, `a2` = float arg 2, `v` = the Vector2 arg:
+```
+f  = clamp(a2 / 24.0, 1.0, 1.3)
+v.setLength((a1 * this.getSpeedMod() + 0.006) * f)
+if ((SandboxOptions.lore.speed.getValue() == 1 && !this.inactive) || this.speedType == 1) {   // sprinter
+    v.setLength(0.08); this.running = true;
+}
+if (v.getLength() > a2) v.setLength(a2)
+```
+Resolved: constants 24, 1.0, 1.3, 0.006, 0.08 and the branch conditions (pc 62 `if_icmpne`, pc 69 `ifeq`, pc 77 `if_icmpne`). UNKNOWN: what `a1` and `a2` are at the call sites, what `getSpeedMod()` returns, the length-per-tick to tiles-per-second scale, and whether `inactive` means what its name suggests. Not applied to the sim: without those the numbers cannot be turned into a speed in tiles/s, so `sim.rs` keeps its PLACEHOLDER.

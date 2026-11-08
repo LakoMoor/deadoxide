@@ -87,3 +87,14 @@ if (ci > 0) {
     }
   }
 }
+
+// --hex <method>: raw bytecode with pc, for reading branch structure by hand against the JVMS opcode table.
+const hi2 = process.argv.indexOf("--hex");
+if (hi2 > 0) for (const m of code.filter((c) => c.name === process.argv[hi2 + 1])) {
+  console.log(`\n== hex ${m.name}${m.desc} ==`);
+  for (let i = 0; i < m.len; i += 16) console.log(String(i).padStart(4), [...data.subarray(m.at + i, m.at + Math.min(i + 16, m.len))].map((b) => b.toString(16).padStart(2, "0")).join(" "));
+}
+
+// --cp <hex indices,...>: print constant-pool entries (floats, refs) by index.
+const cpi = process.argv.indexOf("--cp");
+if (cpi > 0) for (const s of process.argv[cpi + 1].split(",")) { const i = parseInt(s, 16), r = cp[i]; console.log(`#${s} = ${r && (r.t === 9 || r.t === 10 || r.t === 11 ? (() => { const c = cp[r.v[0]].v, nt = cp[r.v[1]].v; return `${utf(c)}.${utf(nt[0])}${utf(nt[1])}`; })() : r && r.t === 8 ? JSON.stringify(utf(r.v)) : r?.v)}`); }
