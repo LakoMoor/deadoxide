@@ -266,10 +266,6 @@ impl Scene {
     /// Visibility mask measured against the real game (night, player indoors): squares outside the player's room are black.
     /// Keeps instances whose square is in the player's room, plus room-less squares touching it (walls/doors), at every level.
     /// Does nothing if the player's square has no room. Light spill from sources (door cone) is NOT modelled.
-    pub fn retain_room(&mut self, px: f32, py: f32, z: i32) -> Option<i32> {
-        self.retain_rooms(px, py, z, false)
-    }
-
     /// zombie.iso.IsoCell.SetCutawayRoomsForPlayer (read from the class file, see docs/COMPATIBILITY.md): the real game shows the player's room
     /// plus the rooms at (x+-1.5, y+-1.5) that the player can see and that lie in front of the facing direction. `probes` adds the four
     /// probe squares WITHOUT the can-see and facing tests (the port has neither yet), so it can over-reveal.
