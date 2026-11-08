@@ -275,7 +275,14 @@ Whole-frame mean|luma diff| of 255 (position 0 and 1 from run 3, 1710x1074; fram
 
 It helps two frames (the real game does reveal squares beyond the room) and hurts position 1: at radius 10 the port also draws the bathroom/bedroom to the west, the opaque south exterior wall and a lot of grass, none of which the real frame shows (checked by eye in `tests/out/l1_10.png`). So line of sight alone is not the rule: missing pieces are the cutaway of camera-facing walls, a vision cone/light limit (night: only lit squares are drawn) and probably the facing direction. The flag stays OFF by default; do not quote 12.19 as a result, the three-frame mean (23.45 -> 20.85 at radius 10) hides a regression.
 
-## Native lighting (Lighting64.dll): blocked
+## Native lighting (Lighting64.dll): Ghidra headless works
+
+- MEASURED: a complete Ghidra 12.1.3 exists in `E:\xplane10-web\toolchain\ghidra_12.1.3_PUBLIC`; its `analyzeHeadless` imported and analysed the DLL in 40 s (2158 functions, 53 of them JNI exports).
+- MEASURED (export names, the DLL's interface): `addLight addRoomLight addTempLight setLightColor setLightActive removeLight updateTorch getSquareLighting getVertLight getLightInfo getDarkMulti getTargetDarkMulti getCanSee getCouldSee getSeen getVisibleRooms squareSet squareSetLightTransmission squareAddWindow squareAddDoor squareAddCurtain stateBeginUpdate stateEndUpdate stateEndFrame DoLightingUpdateNew playerSet scroll* teleport chunk*`. Largest: `stateEndUpdate` (3737 bytes, 0x180016370) and `getSquareLighting` (1668 bytes, 0x1800140d0).
+- Takeaway: the DLL also owns can-see/could-see/seen and the visible-room list, so the visibility rule that fails on position 1 is probably computed here, not only in Java.
+- UNKNOWN: falloff, colour and room-light maths. Nothing is decompiled yet; next targets are `stateEndUpdate` and `getSquareLighting`.
+
+Earlier note, kept for history (the REA route):
 
 - MEASURED: `zombie.iso.LightingJNI` loads `System.loadLibrary("Lighting")`; `Lighting64.dll` (x86_64 PE, sha256 1866188d8e253de521ba208f06f1db9b9019f333162ff3c31dd83506fafee773) sits in the game root.
 - BLOCKED: REA `open_binary` succeeds, but every analysis call fails with `provider_unavailable`: Ghidra is configured at `E:\tools\ghidra_12.1.4_PUBLIC` and that folder has no `application.properties`/`analyzeHeadless.bat` (the install is missing or incomplete). Hopper, IDA and Kuna are not usable on this host.
