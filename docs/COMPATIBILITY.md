@@ -299,3 +299,13 @@ Earlier note, kept for history (the REA route):
 
 - MEASURED: `stateEndUpdate` (0x180016370) swaps double-buffered state and drains the add/remove light queues (list/deque helpers `FUN_1800127f0`, `FUN_18000efa0`, `FUN_18000f230`, ...). It contains no falloff or colour formula.
 - UNKNOWN: where the per-square light maths runs. Likely a worker thread started from `DoLightingUpdateNew` (0x180012aa0) or a thread entry in the DLL; not located yet. Next: follow `CreateThread`/thread-entry xrefs and read the float constants there.
+
+### Per-light contribution in Lighting64.dll (FUN_180009600, read by hand)
+
+Found by ranking all 2158 functions by float-instruction count and decompiling the ones with `sqrtss`. `DoLightingUpdateNew` (0x180012aa0) calls `FUN_180009c30` once per active player (4 slots), which scrolls the per-player grid and runs the propagation; `FUN_180009600` (0x180009600) turns one light plus one square into an RGB value. Stated as observations; the port will re-implement it, not copy it.
+
+- MEASURED constants (read from the DLL's data section): 0.5 (tile centre offset), 1.0, 255.0, -1.0, 0.8, 1.15, 30.0, 1000.0.
+- Light record fields as used (offsets): +0x04/+0x08 x/y, +0x10/+0x14/+0x18 colour r/g/b as floats, +0x1c/+0x20 facing vector, +0x24 radius, +0x28 intensity, +0x2c cone flag (char), +0x30 cone value, +0x34 cone kind (int). A global int (`DAT_18008f008`, initial value 1 in the file) multiplies the radius.
+- Rule for a square (x, y) that has propagated path distance `d`: the light applies when `d < radius*G` and the straight-line distance from the square centre (x+0.5, y+0.5) to the light is under `radius*G`, the square is on the light's floor, and (cone lights only) the facing dot product passes the cone test; non-cone lights additionally need `dot < 0.8` or an equal-to-minus-one case (the exact meaning of that test is UNKNOWN).
+- Falloff: `t = clamp(d / (radius*G), 0, 1)`; `att = (1 - t*t) * 1.15`; channel = `(int)(att * intensity * colour_c * 255 * coneFactor)` with `coneFactor = 1` for non-cone lights and `min(1, 2*(−dot − cone))` for cone lights. Integer result per channel, not clamped here.
+- UNKNOWN: how channels from several lights are combined (the lookup keeps at most 5 lights per square), what feeds the night ambient (`getDarkMulti`), how light passes windows and doors (`squareAddWindow`, `squareSetLightTransmission`), and which lights exist in the oracle frames. No port code and no oracle diff yet, so the falloff above is NOT claimed to match.
