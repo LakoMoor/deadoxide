@@ -1,4 +1,5 @@
 //! Zomboid-rs client. `zomboid-client <root> [cell] [--shot out.png [cx cy zoom w h]]`
+mod light;
 mod scene;
 mod sim;
 use scene::*;
