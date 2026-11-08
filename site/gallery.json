@@ -5,16 +5,16 @@
       "title": "Living room at spawn",
       "game": "assets/gallery/game_clean2.png",
       "port": "assets/gallery/port_lit_room.png",
-      "diff": 16.27,
-      "caption": "Night, game paused. The real game on the left, the port on the right: geometry, camera, furniture and walls match. Lighting is missing: the light patch by the door and the darkening."
+      "diff": 15.16,
+      "caption": "Night, game paused. The real game on the left, the port on the right: geometry, camera, furniture and walls match. Only a flat night ambient (x0.8) is applied; the light patch outside the door and the falloff are still missing."
     },
     {
       "id": "moved",
       "title": "Character moved (held-out frame)",
       "game": "assets/gallery/game_s3_moved_S.png",
       "port": "assets/gallery/port_s3.png",
-      "diff": 27.09,
-      "caption": "A second oracle: the character walked a few tiles, position read from the save. The camera and the wall cutaway rule were checked on this frame without tuning. Most of the remaining difference is lighting."
+      "diff": 26.09,
+      "caption": "A second oracle: the character walked a few tiles, position read from the save. The camera and the wall cutaway rule were checked on this frame without tuning; the ambient factor was chosen on frame 1 and confirmed here by a sweep (27.1 to 26.1). Most of the remaining difference is lighting."
     },
     {
       "id": "nomask",
@@ -22,7 +22,7 @@
       "game": "assets/gallery/game_clean2.png",
       "port": "assets/gallery/port_z0_aligned.png",
       "diff": 79.68,
-      "caption": "The same frame before the visibility mask: the port drew the whole house and yard, while the game shows only the player's room. Difference from the game was 79.7 of 255, now 16.3."
+      "caption": "The same frame before the visibility mask: the port drew the whole house and yard, while the game shows only the player's room. Difference from the game was 79.7 of 255, now 15.2."
     }
   ],
   "portOnly": [

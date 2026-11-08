@@ -1,7 +1,7 @@
 {
   "generated": "2026-11-08",
   "game": "Project Zomboid 42.21.0 (Steam build 25485521)",
-  "overall": 20.3,
+  "overall": 20.5,
   "note": "The overall percentage is a weighted estimate. Measured areas are computed by commands (see how/facts); the rest are author estimates, marked measured:false.",
   "areas": [
     {
@@ -39,14 +39,14 @@
       "name": "World rendering",
       "weight": 20,
       "measured": true,
-      "score": 0.36441666666666667,
+      "score": 0.3736666666666667,
       "how": "frame similarity to the game, 1 - (diff/60), times 0.5: lighting, characters, weather and animation are not there yet",
       "facts": [
-        "frame 1 difference from the game: 16.27 of 255",
-        "frame 2 (held-out) difference: 27.09 of 255",
+        "frame 1 difference from the game: 15.16 of 255",
+        "frame 2 (held-out) difference: 26.09 of 255",
         "before the visibility mask: 79.68 of 255"
       ],
-      "percent": 36.4
+      "percent": 37.4
     },
     {
       "id": "sim",
@@ -122,8 +122,8 @@
     "headerParsed": 120687,
     "headerTotal": 123391,
     "zones": 37389,
-    "frameDiff1": 16.27,
-    "frameDiff2": 27.09,
+    "frameDiff1": 15.16,
+    "frameDiff2": 26.09,
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
     "goldenLogLines": 23,

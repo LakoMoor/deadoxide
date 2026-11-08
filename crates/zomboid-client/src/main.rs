@@ -21,6 +21,8 @@ const CAM_OVER_FEET: f32 = 56.0;
 struct CamU {
     center: [f32; 2],
     scale: [f32; 2],
+    /// x = ambient multiplier on the world colour (1.0 = unlit), yzw unused
+    light: [f32; 4],
 }
 
 #[derive(Clone, Copy)]
@@ -28,6 +30,7 @@ struct Camera {
     center: [f32; 2],
     zoom: f32,
     max_level: usize,
+    ambient: f32,
 }
 
 struct Gfx {
@@ -80,7 +83,7 @@ impl Gfx {
         });
         let cam_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("cam"),
-            size: 16,
+            size: 32,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -94,7 +97,7 @@ impl Gfx {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -208,6 +211,7 @@ impl Gfx {
                 2.0 * cam.zoom / size.0 as f32,
                 2.0 * cam.zoom / size.1 as f32,
             ],
+            light: [cam.ambient, 0.0, 0.0, 0.0],
         };
         self.queue
             .write_buffer(&self.cam_buf, 0, bytemuck::bytes_of(&u));
@@ -568,6 +572,7 @@ fn main() -> anyhow::Result<()> {
         center: [(gx - gy) * 64.0, (gx + gy) * 32.0],
         zoom: 0.5,
         max_level: top,
+        ambient: 1.0,
     };
     if let Some(i) = a.iter().position(|s| s == "--shot") {
         let f = |n: usize, d: f32| a.get(i + n).and_then(|s| s.parse().ok()).unwrap_or(d);
@@ -580,6 +585,13 @@ fn main() -> anyhow::Result<()> {
             .iter()
             .position(|s| s == "--player")
             .map(|j| (a[j + 1].parse().unwrap(), a[j + 2].parse().unwrap()));
+        // Night ambient on lit squares: game/port luma ratio is ~0.8 in the room interior on two real frames (docs/COMPATIBILITY.md, tools/ratio_map.mjs).
+        if a.iter().any(|s| s == "--lit-room") {
+            cam.ambient = 0.8;
+        }
+        if let Some(j) = a.iter().position(|s| s == "--ambient") {
+            cam.ambient = a[j + 1].parse().unwrap_or(1.0);
+        }
         if a.iter().any(|s| s == "--lit-room") {
             if let Some((px, py)) = pl {
                 println!(

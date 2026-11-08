@@ -1,4 +1,4 @@
-struct Cam { center: vec2<f32>, scale: vec2<f32> };
+struct Cam { center: vec2<f32>, scale: vec2<f32>, light: vec4<f32> };
 @group(0) @binding(0) var<uniform> cam: Cam;
 @group(0) @binding(1) var atlas: texture_2d_array<f32>;
 @group(0) @binding(2) var samp: sampler;
@@ -25,5 +25,5 @@ fn vs_main(@builtin(vertex_index) vi: u32, @location(0) rect: vec4<f32>, @locati
 fn fs_main(i: VOut) -> @location(0) vec4<f32> {
     let c = textureSample(atlas, samp, i.uv, i.layer);
     if (c.a < 0.004) { discard; }
-    return c;
+    return vec4<f32>(c.rgb * cam.light.x, c.a);
 }

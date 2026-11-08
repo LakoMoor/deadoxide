@@ -155,3 +155,9 @@ Real game, same save, pressed S (1.5 s, unpaused then paused), then Esc > "Вы�
    Whole-frame mean|luma diff| (0..255): frame 1 17.34 -> 16.27, frame 2 (held out, not used to choose the rule) 28.12 -> 27.09.
 3. What still differs: lighting (the road light cone and the dark vignette), grass strips, the room's far-side outside details. Frame 2 residual 27.1 is dominated by lighting.
 Still one scene, one room, night. The time-of-day question (map_t.bin) stays unresolved.
+
+## Night ambient (`--lit-room` => x0.8) — measured, partial
+
+Command: `node tools/ratio_map.mjs game.png port.png 80` prints game/port luma per 80 px cell where the port draws. Inside the player's room the ratio is 0.72-0.99 on both oracle frames (median about 0.8); toward the lower-left it drops to 0 (the real game keeps those squares black: a visibility rule not modelled) and outside the door it exceeds 1 (the light patch, not modelled).
+Sweep of the flat multiplier (`--ambient k`, whole-frame mean|luma diff| of 255): k=1.0 16.27 / 27.09, k=0.9 15.54 / 26.41, k=0.8 15.16 / 26.09, k=0.7 15.20 / 26.31 (frame 1 / frame 2). `--lit-room` now implies 0.8.
+Honest limits: ~1 point of 255 gained; the factor was picked from frame 1's median and the frame 2 sweep agrees, so frame 2 is no longer fully held out for lighting. Still UNKNOWN: how the real game computes per-square light (lamp, door cone, vision cone), time of day, daytime ambient. Reproduce frame 2: camera centre = iso(8305.8252, 11691.6582) - (0, 56), `--player 8305.8252 11691.6582`.
