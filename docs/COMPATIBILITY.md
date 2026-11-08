@@ -323,3 +323,10 @@ Found by ranking all 2158 functions by float-instruction count and decompiling t
 - `getVertLight(player, x, y, z, vertex 0..7)`: returns one packed 32-bit colour per square per vertex (8 vertices per square, matching the 8 corner lights Java asks for). Computed elsewhere in the update pass; not read yet.
 - `getDarkMulti(player, x, y, z)`: returns a stored 32-bit value per square (the array `getSquareLighting` also exposes, scaled by a double). Where it is written is UNKNOWN.
 - Consequence: the remaining numeric work is the writer of the vertex-light and dark-multiplier arrays inside `FUN_180009c30` (0x180009c30, 952 instructions) and the helpers it calls (`FUN_180003970`, `FUN_180004800` are the next float-heavy callees).
+
+### Per-square colour from the light list (FUN_180003970, read by hand)
+
+- MEASURED: for one square it walks the square's light list (the up-to-5-entry list above). For each entry it computes `k = 1 - dist / radiusByte` (a second, linear falloff on top of the (1-t^2) one used while propagating) and takes, per channel, the MAX over entries of `channel_byte * k` (integer truncation), starting from the square's existing colour.
+- MEASURED: when a flag bit (`square+0x1d & 4`, probably "outdoors/sees sky") is set, the starting colour is raised to at least the global ambient colour held at `state+0x38` (three bytes). So outdoor squares never go below the ambient colour; indoor squares can go to 0.
+- MEASURED: it also averages a float field (`dark`) of the square with those of up to four neighbours that are darker and visible (flag byte bits 0-3 pick the four directions), dividing by the number of terms used; negative global colour floats (`DAT_18008fdf8/fc/fe00`) are clamped to 0.
+- UNKNOWN: who writes the ambient colour at `state+0x38` each frame (it must come from Java's time-of-day, via `stateBeginUpdate` or `playerSet`), and the vertex (8-corner) interpolation that follows. No port code and no oracle diff for this step.
