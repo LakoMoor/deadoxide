@@ -88,3 +88,17 @@ async function mods() {
 }
 
 progress(); gallery(); mods();
+
+async function notes() {
+  const host = $("#notes-list");
+  try {
+    const c = await (await fetch("changelog.json", { cache: "no-store" })).json();
+    for (const r of c.releases) {
+      const box = el("div", { class: "rel" }, el("h3", {}, `v${r.version}`, el("span", {}, r.date)));
+      if (r.new?.length) box.append(el("h4", {}, "New"), el("ul", {}, ...r.new.map((s) => el("li", {}, s))));
+      if (r.fixed?.length) box.append(el("h4", {}, "Fixed"), el("ul", {}, ...r.fixed.map((s) => el("li", {}, s))));
+      host.append(box);
+    }
+  } catch { host.append(el("p", {}, "Patch notes are unavailable right now.")); }
+}
+notes();

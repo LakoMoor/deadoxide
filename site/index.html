@@ -11,7 +11,7 @@
 <body>
 <header class="nav"><div class="wrap">
   <a class="brand" href="#top"><img src="assets/icon-256.png" alt="">DeadOxide</a>
-  <nav class="links"><a href="#progress">Progress</a><a href="#compare">Comparison</a><a href="#launcher">Launcher</a><a href="#mods">Mods</a><a href="https://github.com/LakoMoor/deadoxide">GitHub</a></nav>
+  <nav class="links"><a href="#progress">Progress</a><a href="#compare">Comparison</a><a href="#features">Features</a><a href="#download">Download</a><a href="#notes">Patch notes</a><a href="#mods">Mods</a><a href="https://github.com/LakoMoor/deadoxide">GitHub</a></nav>
 </div></header>
 
 <main class="wrap" id="top">
@@ -20,7 +20,7 @@
       <span class="pill">unofficial project · early stage</span>
       <h1>Project Zomboid, rewritten in <em>Rust</em></h1>
       <p class="lead">A compatible runtime that reads the files of your own copy of the game: maps, tiles, Lua scripts, saves. This page shows honestly how much already works and how each number was checked.</p>
-      <div class="cta"><a class="btn primary" href="#launcher">Get the launcher</a><a class="btn" href="#compare">Compare with the original</a></div>
+      <div class="cta"><a class="btn primary" href="#download">Download the launcher</a><a class="btn" href="#compare">Compare with the original</a></div>
     </div>
     <div class="ring-card">
       <div class="ring">
@@ -50,16 +50,35 @@
     <p class="note" style="margin-top:18px">Screenshots of the original game are shown as evidence for the comparison. The game belongs to The Indie Stone. If you are the rights holder and object, open an issue in the repository and they will be removed.</p>
   </section>
 
-  <section id="launcher">
-    <h2>Launcher</h2>
-    <p class="sub">A GPUI window with Play, Mods and Progress tabs. It finds your Project Zomboid install, starts the port's client or the original game with a separate profile, and installs mods from the catalog with a sha256 check.</p>
-    <div class="panel">
-      <p>Build from source (Rust required):</p>
-      <pre>git clone https://github.com/LakoMoor/deadoxide
+  <section id="features">
+    <h2>What it is</h2>
+    <p class="sub">The same idea as Horizon, for Project Zomboid: the real game is the specification, and every claim is checked against it.</p>
+    <div class="feat">
+      <div class="f"><b>Reads your own copy</b><span>Maps, tile packs, scripts, translations and saves are read from your Steam install. Nothing from the game is shipped.</span></div>
+      <div class="f"><b>Runs the game's Lua</b><span>The game's own <code>media/lua</code> runs on Lua 5.1 with PZ-style <code>require</code>, including the real map zone code.</span></div>
+      <div class="f"><b>Tested against the original</b><span>Frames, logs and zone lists are compared with the real game. Numbers on this page come from those comparisons.</span></div>
+      <div class="f"><b>Fast, in Rust</b><span>A wgpu isometric renderer and a deterministic 30 Hz simulation, no Java runtime needed for the port client.</span></div>
+      <div class="f"><b>Launcher with mods</b><span>One window to start the port or the original game with a separate profile, and to install mods with a sha256 check.</span></div>
+      <div class="f"><b>Honest progress</b><span>Every area says whether it is measured or an author estimate. Missing things are listed, not hidden.</span></div>
+    </div>
+  </section>
+
+  <section id="download">
+    <h2>Download</h2>
+    <p class="sub">You need your own copy of Project Zomboid (build 42.21.0). The launcher finds it automatically or via <code>PZ_ROOT</code>.</p>
+    <div class="dl">
+      <a class="btn primary" href="https://github.com/LakoMoor/deadoxide/releases/latest">Windows (x64) launcher</a>
+      <a class="btn" href="https://github.com/LakoMoor/deadoxide">Build from source</a>
+    </div>
+    <img src="assets/launcher-home.png" alt="The DeadOxide launcher" style="width:100%;border-radius:16px;border:1px solid var(--line);margin-top:18px">
+    <pre style="margin-top:16px">git clone https://github.com/LakoMoor/deadoxide
 cd deadoxide
 cargo run --release -p deadoxide-launcher</pre>
-      <p style="margin-bottom:0">Prebuilt binaries will appear in <a href="https://github.com/LakoMoor/deadoxide/releases">Releases</a> once there is a first one.</p>
-    </div>
+  </section>
+
+  <section id="notes">
+    <h2>Patch notes</h2>
+    <div id="notes-list"></div>
   </section>
 
   <section id="mods">

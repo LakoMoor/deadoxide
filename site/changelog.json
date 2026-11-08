@@ -1,0 +1,18 @@
+{
+  "releases": [
+    {
+      "version": "0.1.0",
+      "date": "2026-11-08",
+      "new": [
+        "Launcher on GPUI Fast: Home, Mods, Progress and Patch notes",
+        "Mod catalog with sha256 verification and safe extraction",
+        "Progress site with side-by-side comparison against the real game",
+        "Visibility mask and wall cutaway measured on two real frames (difference 16.3 and 27.1 of 255)"
+      ],
+      "fixed": [
+        "Lua require order is case-insensitive like the real client",
+        "Zone parser accepts .5 style numbers from objects.lua"
+      ]
+    }
+  ]
+}

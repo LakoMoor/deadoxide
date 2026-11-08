@@ -1,31 +1,65 @@
 #![recursion_limit = "1024"]
-//! DeadOxide launcher on GPUI Fast (the same UI stack as Horizon's launcher). Tabs: Play / Mods / Progress / About.
+//! DeadOxide launcher on GPUI Fast, laid out like Horizon's: an instance sidebar, a top nav (Home / Mods / Progress / Patch notes),
+//! a hero with Play, and an overview with screenshots and the patch log.
 //! Play starts the Rust client (read-only over the player's own install) or the original game with an isolated `-cachedir`.
-//! Mods come from a registry (`registry.json`): download -> verify sha256 -> extract into `<profile>/mods`.
+use deadoxide_launcher::*;
 use gpui::{prelude::*, *};
 use std::path::PathBuf;
 use std::process::{Child, Command};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
-use deadoxide_launcher::*;
-const BG: u32 = 0x0e0b0a;
-const CARD: u32 = 0x1d1713;
-const LINE: u32 = 0x34281f;
-const TEXT: u32 = 0xece3da;
-const MUTED: u32 = 0xa89a8c;
+const BG: u32 = 0x0b0908;
+const SIDE: u32 = 0x120d0b;
+const CARD: u32 = 0x18110e;
+const LINE: u32 = 0x2b1f18;
+const TEXT: u32 = 0xf0e8df;
+const MUTED: u32 = 0x9d8f82;
 const RUST: u32 = 0xe8692a;
 const RUST2: u32 = 0xff9a55;
 const BAD: u32 = 0xe07070;
+const OK: u32 = 0x6fcf85;
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const ICON: &[u8] = include_bytes!("../../assets/icon-256.png");
+const SHOTS: [(&str, &[u8]); 3] = [
+    (
+        "Real game: the living room at spawn",
+        include_bytes!("../../site/assets/gallery/game_clean2.png"),
+    ),
+    (
+        "Port: the same frame",
+        include_bytes!("../../site/assets/gallery/port_lit_room.png"),
+    ),
+    (
+        "Port: cell 41_39 on the GPU",
+        include_bytes!("../../site/assets/gallery/port_gpu_cell41_39.png"),
+    ),
+];
 
 enum Msg {
     Registry(Result<Vec<Mod>, String>),
     Progress(Result<Progress, String>),
+    Changelog(Result<Vec<Release>, String>),
     Installed(String, Result<PathBuf, String>),
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Page {
+    Home,
+    Mods,
+    Progress,
+    Notes,
+}
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Port,
+    Original,
+}
+
 struct Launcher {
-    tab: usize,
+    page: Page,
+    mode: Mode,
     game: Option<PathBuf>,
     profile: PathBuf,
     client: Option<PathBuf>,
@@ -35,8 +69,11 @@ struct Launcher {
     mods_err: Option<String>,
     progress: Option<Progress>,
     prog_err: Option<String>,
+    notes: Vec<Release>,
     busy: Vec<String>,
     base: String,
+    icon: Arc<Image>,
+    shots: Vec<Arc<Image>>,
     tx: mpsc::Sender<Msg>,
     rx: mpsc::Receiver<Msg>,
 }
@@ -50,12 +87,15 @@ impl Launcher {
             .as_ref()
             .map(|g| g.join("zomboid-rs/profile"))
             .unwrap_or_else(|| PathBuf::from("profile"));
-        let tab = std::env::var("DEADOXIDE_TAB")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0);
+        let page = match std::env::var("DEADOXIDE_TAB").ok().as_deref() {
+            Some("1") => Page::Mods,
+            Some("2") => Page::Progress,
+            Some("3") => Page::Notes,
+            _ => Page::Home,
+        };
         let me = Launcher {
-            tab,
+            page,
+            mode: Mode::Port,
             game,
             profile,
             client: find_client(),
@@ -65,8 +105,14 @@ impl Launcher {
             mods_err: None,
             progress: None,
             prog_err: None,
+            notes: vec![],
             busy: vec![],
             base,
+            icon: Arc::new(Image::from_bytes(ImageFormat::Png, ICON.to_vec())),
+            shots: SHOTS
+                .iter()
+                .map(|(_, b)| Arc::new(Image::from_bytes(ImageFormat::Png, b.to_vec())))
+                .collect(),
             tx,
             rx,
         };
@@ -93,6 +139,10 @@ impl Launcher {
             let p = get_bytes(&format!("{base}progress.json"))
                 .and_then(|b| serde_json::from_slice::<Progress>(&b).map_err(|e| e.to_string()));
             let _ = tx.send(Msg::Progress(p));
+            let c = get_bytes(&format!("{base}changelog.json"))
+                .and_then(|b| serde_json::from_slice::<Changelog>(&b).map_err(|e| e.to_string()))
+                .map(|c| c.releases);
+            let _ = tx.send(Msg::Changelog(c));
         });
     }
     fn poll(&mut self, cx: &mut Context<Self>) {
@@ -107,6 +157,8 @@ impl Launcher {
                 Msg::Registry(Err(e)) => self.mods_err = Some(e),
                 Msg::Progress(Ok(p)) => self.progress = Some(p),
                 Msg::Progress(Err(e)) => self.prog_err = Some(e),
+                Msg::Changelog(Ok(v)) => self.notes = v,
+                Msg::Changelog(Err(_)) => {}
                 Msg::Installed(id, r) => {
                     self.busy.retain(|b| *b != id);
                     self.status = match r {
@@ -128,6 +180,23 @@ impl Launcher {
     }
     fn mods_dir(&self) -> PathBuf {
         self.profile.join("mods")
+    }
+    fn can_play(&self) -> bool {
+        self.child.is_none()
+            && self.game.is_some()
+            && match self.mode {
+                Mode::Port => self.client.is_some(),
+                Mode::Original => true,
+            }
+    }
+    fn play(&mut self) {
+        if !self.can_play() {
+            return;
+        }
+        match self.mode {
+            Mode::Port => self.play_port(),
+            Mode::Original => self.play_original(),
+        }
     }
     fn play_port(&mut self) {
         let (Some(g), Some(c)) = (&self.game, &self.client) else {
@@ -178,6 +247,13 @@ impl Launcher {
             let _ = c.wait();
         }
     }
+    fn open_profile(&mut self) {
+        let _ = std::fs::create_dir_all(&self.profile);
+        self.status = match Command::new("explorer").arg(&self.profile).spawn() {
+            Ok(_) => format!("Opened {}", self.profile.display()),
+            Err(e) => format!("Could not open the folder: {e}"),
+        };
+    }
 }
 
 fn button(
@@ -187,7 +263,7 @@ fn button(
     enabled: bool,
 ) -> Stateful<Div> {
     let (bg, fg) = if !enabled {
-        (0x2a1f18, 0x6b5f54)
+        (0x1c1410, 0x6b5f54)
     } else if primary {
         (RUST, 0x1a0e07)
     } else {
@@ -195,9 +271,9 @@ fn button(
     };
     let b = div()
         .id(id)
-        .px_4()
-        .py_2()
-        .rounded_lg()
+        .px_5()
+        .py_3()
+        .rounded_full()
         .border_1()
         .border_color(rgb(if primary && enabled { RUST2 } else { LINE }))
         .bg(rgb(bg))
@@ -211,207 +287,679 @@ fn button(
 }
 
 fn bar(pct: f32) -> impl IntoElement {
+    div().h(px(8.)).w_full().rounded_full().bg(rgb(LINE)).child(
+        div()
+            .h_full()
+            .w(relative((pct / 100.0).clamp(0.0, 1.0)))
+            .rounded_full()
+            .bg(rgb(RUST)),
+    )
+}
+
+fn panel() -> Div {
     div()
-        .h(px(8.))
-        .w_full()
-        .rounded_full()
-        .bg(rgb(0x2a1f18))
-        .child(
-            div()
-                .h_full()
-                .w(relative((pct / 100.0).clamp(0.0, 1.0)))
-                .rounded_full()
-                .bg(rgb(RUST)),
-        )
+        .rounded_xl()
+        .border_1()
+        .border_color(rgb(LINE))
+        .bg(rgb(CARD))
 }
 
 impl Render for Launcher {
     fn render(&mut self, _w: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let tabs = ["Play", "Mods", "Progress", "About"]
-            .iter()
-            .enumerate()
-            .map(|(i, n)| {
-                let on = self.tab == i;
+        let (dot, state) = match (&self.game, &self.client) {
+            (None, _) => (BAD, "Game not found"),
+            (Some(_), None) => (RUST2, "Client not built"),
+            _ if self.child.is_some() => (OK, "Running"),
+            _ => (OK, "Ready"),
+        };
+
+        // ---- sidebar: instances, like Horizon's ----
+        let sidebar = div()
+            .w(px(250.))
+            .h_full()
+            .flex_none()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_4()
+            .bg(rgb(SIDE))
+            .border_r_1()
+            .border_color(rgb(LINE))
+            .child(
                 div()
-                    .id(("tab", i))
-                    .px_3()
-                    .py_1()
-                    .rounded_md()
-                    .cursor_pointer()
-                    .text_color(rgb(if on { 0x1a0e07 } else { MUTED }))
-                    .bg(rgb(if on { RUST } else { BG }))
-                    .child(*n)
-                    .on_click(cx.listener(move |t, _, _, cx| {
-                        t.tab = i;
-                        cx.notify();
-                    }))
-            });
-        let body: AnyElement = match self.tab {
-            0 => {
-                let running = self.child.is_some();
-                let can_port = self.game.is_some() && self.client.is_some() && !running;
-                let can_orig = self.game.is_some() && !running;
-                let mut col = div().flex().flex_col().gap_3();
-                col = col.child(match &self.game {
-                    Some(g) => div().child(format!("Project Zomboid: {}", g.display())),
-                    None => div().text_color(rgb(BAD)).child("Project Zomboid install not found. Set the PZ_ROOT environment variable."),
+                    .flex()
+                    .justify_between()
+                    .child(div().text_color(rgb(MUTED)).child("Instances")),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_3()
+                    .p_3()
+                    .rounded_lg()
+                    .bg(rgb(CARD))
+                    .border_1()
+                    .border_color(rgb(LINE))
+                    .child(img(self.icon.clone()).size(px(38.)).rounded_lg())
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .child(div().font_weight(FontWeight::BOLD).child("Project Zomboid"))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_1()
+                                    .text_sm()
+                                    .text_color(rgb(MUTED))
+                                    .child(div().size(px(8.)).rounded_full().bg(rgb(dot)))
+                                    .child(state),
+                            ),
+                    ),
+            )
+            .child(div().flex_1())
+            .child(
+                panel()
+                    .p_4()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(FontWeight::BOLD)
+                            .child("Own your copy"),
+                    )
+                    .child(div().text_sm().text_color(rgb(MUTED)).child(
+                        "DeadOxide reads your Project Zomboid install. No game files are shipped.",
+                    )),
+            )
+            .child(
+                div()
+                    .text_color(rgb(MUTED))
+                    .child("Source: LakoMoor/deadoxide"),
+            )
+            .child(
+                div()
+                    .text_color(rgb(MUTED))
+                    .child("Website: lakomoor.github.io/deadoxide"),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(rgb(MUTED))
+                    .child(format!("Launcher {VERSION}")),
+            );
+
+        // ---- top nav ----
+        let nav = [
+            (Page::Home, "Home"),
+            (Page::Mods, "Mods"),
+            (Page::Progress, "Progress"),
+            (Page::Notes, "Patch notes"),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(i, (p, n))| {
+            let on = self.page == p;
+            div()
+                .id(("nav", i))
+                .px_4()
+                .py_2()
+                .rounded_lg()
+                .cursor_pointer()
+                .text_color(rgb(if on { TEXT } else { MUTED }))
+                .bg(rgb(if on { LINE } else { CARD }))
+                .child(n)
+                .on_click(cx.listener(move |t, _, _, cx| {
+                    t.page = p;
+                    cx.notify();
+                }))
+        });
+        let topbar = div()
+            .flex()
+            .items_center()
+            .gap_1()
+            .p_1()
+            .rounded_xl()
+            .bg(rgb(CARD))
+            .children(nav);
+
+        // ---- pages ----
+        let body: AnyElement = match self.page {
+            Page::Home => {
+                let steps = [
+                    (
+                        "01",
+                        "Game install",
+                        match &self.game {
+                            Some(g) => g.display().to_string(),
+                            None => "Not found. Set PZ_ROOT to your Project Zomboid folder.".into(),
+                        },
+                        self.game.is_some(),
+                    ),
+                    (
+                        "02",
+                        "Port client",
+                        match &self.client {
+                            Some(c) => c.display().to_string(),
+                            None => {
+                                "Not built. Run: cargo build --release -p zomboid-client".into()
+                            }
+                        },
+                        self.client.is_some(),
+                    ),
+                    (
+                        "03",
+                        "Profile",
+                        format!(
+                            "{} (kept apart from your own saves)",
+                            self.profile.display()
+                        ),
+                        true,
+                    ),
+                ];
+                let rows = steps.into_iter().map(|(n, t, d, ok)| {
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_4()
+                        .py_3()
+                        .border_t_1()
+                        .border_color(rgb(LINE))
+                        .child(div().w(px(28.)).text_color(rgb(MUTED)).child(n))
+                        .child(
+                            div()
+                                .flex_1()
+                                .flex()
+                                .flex_col()
+                                .child(div().font_weight(FontWeight::SEMIBOLD).child(t))
+                                .child(
+                                    div()
+                                        .text_sm()
+                                        .text_color(rgb(if ok { MUTED } else { BAD }))
+                                        .child(d),
+                                ),
+                        )
                 });
-                col = col.child(div().text_color(rgb(MUTED)).child(format!("Profile (separate from your own saves): {}", self.profile.display())));
-                let mut row = div().flex().gap_3().child(button("play-port", "Play the port client", true, can_port).on_click(cx.listener(|t, _, _, cx| {
-                    if t.game.is_some() && t.client.is_some() && t.child.is_none() {
-                        t.play_port();
-                        cx.notify();
-                    }
-                })));
-                row = row.child(button("play-orig", "Play the original (separate profile)", false, can_orig).on_click(cx.listener(|t, _, _, cx| {
-                    if t.game.is_some() && t.child.is_none() {
-                        t.play_original();
-                        cx.notify();
-                    }
-                })));
-                if running {
-                    row = row.child(button("stop", "Stop", false, true).on_click(cx.listener(|t, _, _, cx| {
-                        t.stop();
-                        t.status = "Stopped".into();
-                        cx.notify();
-                    })));
-                }
-                col = col.child(row);
-                if self.client.is_none() {
-                    col = col.child(div().text_color(rgb(MUTED)).child("Port client not found. Build it: cargo build --release -p zomboid-client"));
-                }
-                col.child(div().text_color(rgb(MUTED)).child("The port client only shows the world for now; it is not playable: zombies, inventory and sound are not done.")).into_any_element()
+                let mode = |id: &'static str,
+                            label: &'static str,
+                            m: Mode,
+                            cur: Mode,
+                            cx: &mut Context<Self>| {
+                    div()
+                        .id(id)
+                        .px_4()
+                        .py_2()
+                        .rounded_full()
+                        .cursor_pointer()
+                        .bg(rgb(if cur == m { TEXT } else { CARD }))
+                        .text_color(rgb(if cur == m { 0x1a0e07 } else { MUTED }))
+                        .child(label)
+                        .on_click(cx.listener(move |t, _, _, cx| {
+                            t.mode = m;
+                            cx.notify();
+                        }))
+                };
+                let play_label = if self.child.is_some() { "Stop" } else { "Play" };
+                let hero = div()
+                    .flex()
+                    .flex_col()
+                    .gap_3()
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .px_3()
+                                    .py_1()
+                                    .rounded_lg()
+                                    .bg(rgb(CARD))
+                                    .border_1()
+                                    .border_color(rgb(LINE))
+                                    .child("Rust Edition"),
+                            )
+                            .child(
+                                div()
+                                    .px_3()
+                                    .py_1()
+                                    .text_color(rgb(MUTED))
+                                    .child("Java Edition"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_4()
+                            .child(img(self.icon.clone()).size(px(64.)).rounded_xl())
+                            .child(
+                                div()
+                                    .text_size(px(54.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .child("DeadOxide"),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .text_color(rgb(MUTED))
+                            .child(match self.progress.as_ref() {
+                                Some(p) => format!(
+                                    "Project Zomboid in Rust. {:.1}% ported; not playable yet.",
+                                    p.overall
+                                ),
+                                None => "Project Zomboid in Rust.".to_string(),
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_3()
+                            .mt_2()
+                            .child(
+                                button(
+                                    "play",
+                                    play_label,
+                                    true,
+                                    self.can_play() || self.child.is_some(),
+                                )
+                                .px_8()
+                                .on_click(cx.listener(
+                                    |t, _, _, cx| {
+                                        if t.child.is_some() {
+                                            t.stop();
+                                            t.status = "Stopped".into();
+                                        } else {
+                                            t.play();
+                                        }
+                                        cx.notify();
+                                    },
+                                )),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .p_1()
+                                    .rounded_full()
+                                    .bg(rgb(CARD))
+                                    .border_1()
+                                    .border_color(rgb(LINE))
+                                    .child(mode(
+                                        "mode-port",
+                                        "Port client",
+                                        Mode::Port,
+                                        self.mode,
+                                        cx,
+                                    ))
+                                    .child(mode(
+                                        "mode-orig",
+                                        "Original game",
+                                        Mode::Original,
+                                        self.mode,
+                                        cx,
+                                    )),
+                            )
+                            .child(
+                                button("folder", "Open profile folder", false, true).on_click(
+                                    cx.listener(|t, _, _, cx| {
+                                        t.open_profile();
+                                        cx.notify();
+                                    }),
+                                ),
+                            ),
+                    );
+                let shots =
+                    div()
+                        .flex()
+                        .w_full()
+                        .gap_3()
+                        .children(self.shots.iter().enumerate().map(|(i, s)| {
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .child(
+                                    img(s.clone())
+                                        .w_full()
+                                        .h(px(150.))
+                                        .object_fit(ObjectFit::Cover)
+                                        .rounded_lg(),
+                                )
+                                .child(div().text_sm().text_color(rgb(MUTED)).child(SHOTS[i].0))
+                        }));
+                let latest = self.notes.first().cloned();
+                let log = panel()
+                    .w(px(300.))
+                    .flex_none()
+                    .p_4()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex()
+                            .justify_between()
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_weight(FontWeight::BOLD)
+                                    .child("Patch log"),
+                            )
+                            .child(div().text_sm().text_color(rgb(MUTED)).child("All notes")),
+                    )
+                    .children(latest.into_iter().flat_map(|r| {
+                        let mut v: Vec<AnyElement> = vec![div()
+                            .text_sm()
+                            .text_color(rgb(MUTED))
+                            .child(format!("v{} · {}", r.version, r.date))
+                            .into_any_element()];
+                        if !r.new.is_empty() {
+                            v.push(
+                                div()
+                                    .mt_1()
+                                    .text_sm()
+                                    .text_color(rgb(MUTED))
+                                    .child("New")
+                                    .into_any_element(),
+                            );
+                            v.extend(r.new.iter().map(|s| {
+                                div().text_sm().child(format!("• {s}")).into_any_element()
+                            }));
+                        }
+                        if !r.fixed.is_empty() {
+                            v.push(
+                                div()
+                                    .mt_1()
+                                    .text_sm()
+                                    .text_color(rgb(MUTED))
+                                    .child("Fixed")
+                                    .into_any_element(),
+                            );
+                            v.extend(r.fixed.iter().map(|s| {
+                                div().text_sm().child(format!("• {s}")).into_any_element()
+                            }));
+                        }
+                        v
+                    }));
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_5()
+                    .child(hero)
+                    .child(
+                        panel()
+                            .px_5()
+                            .pb_2()
+                            .child(div().flex().flex_col().children(rows)),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .gap_4()
+                            .child(
+                                panel()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .overflow_hidden()
+                                    .p_4()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_3()
+                                    .child(
+                                        div()
+                                            .text_lg()
+                                            .font_weight(FontWeight::BOLD)
+                                            .child("Screenshots"),
+                                    )
+                                    .child(shots),
+                            )
+                            .child(log),
+                    )
+                    .into_any_element()
             }
-            1 => {
+            Page::Mods => {
                 let mut col = div().flex().flex_col().gap_3();
                 col = col.child(
                     div()
                         .flex()
                         .justify_between()
                         .items_center()
-                        .child(div().text_color(rgb(MUTED)).child(format!("Mods folder: {}", self.mods_dir().display())))
-                        .child(button("refresh", "Refresh", false, true).on_click(cx.listener(|t, _, _, cx| {
-                            t.mods_err = None;
-                            t.fetch();
-                            cx.notify();
-                        }))),
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .child(div().text_2xl().font_weight(FontWeight::BOLD).child("Mods"))
+                                .child(div().text_sm().text_color(rgb(MUTED)).child(format!(
+                                    "Installed into {}",
+                                    self.mods_dir().display()
+                                ))),
+                        )
+                        .child(
+                            button("refresh", "Refresh", false, true).on_click(cx.listener(
+                                |t, _, _, cx| {
+                                    t.mods_err = None;
+                                    t.fetch();
+                                    cx.notify();
+                                },
+                            )),
+                        ),
                 );
                 if let Some(e) = &self.mods_err {
-                    col = col.child(div().text_color(rgb(BAD)).child(format!("Catalog unavailable: {e}")));
+                    col = col.child(
+                        div()
+                            .text_color(rgb(BAD))
+                            .child(format!("Catalog unavailable: {e}")),
+                    );
                 }
                 for (i, m) in self.mods.iter().enumerate() {
                     let busy = self.busy.contains(&m.id);
                     let done = self.mods_dir().join(&m.id).exists();
-                    let label = if busy { "Downloading…" } else if done { "Reinstall" } else { "Install" };
+                    let label = if busy {
+                        "Downloading…"
+                    } else if done {
+                        "Reinstall"
+                    } else {
+                        "Install"
+                    };
                     let mm = m.clone();
                     col = col.child(
-                        div()
-                            .p_3()
-                            .rounded_lg()
-                            .border_1()
-                            .border_color(rgb(LINE))
-                            .bg(rgb(CARD))
+                        panel()
+                            .p_4()
                             .flex()
-                            .flex_col()
-                            .gap_1()
+                            .items_center()
+                            .gap_4()
                             .child(
                                 div()
+                                    .size(px(48.))
+                                    .rounded_lg()
+                                    .bg(rgb(LINE))
                                     .flex()
-                                    .justify_between()
                                     .items_center()
-                                    .child(div().flex().gap_2().child(div().font_weight(FontWeight::BOLD).child(m.name.clone())).child(div().text_color(rgb(MUTED)).child(format!("v{} · {}", m.version, m.author))))
-                                    .child(button(("install", i), label, true, !busy).on_click(cx.listener(move |t, _, _, cx| {
-                                        if t.busy.contains(&mm.id) {
-                                            return;
-                                        }
-                                        t.busy.push(mm.id.clone());
-                                        let (tx, base, dir, m) = (t.tx.clone(), t.base.clone(), t.mods_dir(), mm.clone());
-                                        std::thread::spawn(move || {
-                                            let r = install(&m, &base, &dir);
-                                            let _ = tx.send(Msg::Installed(m.id, r));
-                                        });
-                                        cx.notify();
-                                    }))),
+                                    .justify_center()
+                                    .text_color(rgb(RUST2))
+                                    .font_weight(FontWeight::BOLD)
+                                    .child(m.name.chars().next().unwrap_or('M').to_string()),
                             )
-                            .child(div().text_color(rgb(MUTED)).child(m.description.clone())),
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .flex()
+                                    .flex_col()
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .gap_2()
+                                            .child(
+                                                div()
+                                                    .font_weight(FontWeight::BOLD)
+                                                    .child(m.name.clone()),
+                                            )
+                                            .child(
+                                                div().text_color(rgb(MUTED)).child(format!(
+                                                    "v{} · {}",
+                                                    m.version, m.author
+                                                )),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(rgb(MUTED))
+                                            .child(m.description.clone()),
+                                    ),
+                            )
+                            .child(button(("install", i), label, true, !busy).on_click(
+                                cx.listener(move |t, _, _, cx| {
+                                    if t.busy.contains(&mm.id) {
+                                        return;
+                                    }
+                                    t.busy.push(mm.id.clone());
+                                    let (tx, base, dir, m) =
+                                        (t.tx.clone(), t.base.clone(), t.mods_dir(), mm.clone());
+                                    std::thread::spawn(move || {
+                                        let r = install(&m, &base, &dir);
+                                        let _ = tx.send(Msg::Installed(m.id, r));
+                                    });
+                                    cx.notify();
+                                }),
+                            )),
                     );
                 }
                 col.into_any_element()
             }
-            2 => {
+            Page::Progress => {
                 let mut col = div().flex().flex_col().gap_2();
                 if let Some(p) = &self.progress {
                     col = col
-                        .child(div().text_2xl().font_weight(FontWeight::BOLD).text_color(rgb(RUST2)).child(format!("Ported: {:.1}%", p.overall)))
+                        .child(
+                            div()
+                                .text_2xl()
+                                .font_weight(FontWeight::BOLD)
+                                .child("Progress"),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(48.))
+                                .font_weight(FontWeight::BOLD)
+                                .text_color(rgb(RUST2))
+                                .child(format!("{:.1}% ported", p.overall)),
+                        )
                         .child(bar(p.overall))
-                        .child(div().text_color(rgb(MUTED)).child(format!("data from {}", p.generated)));
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(rgb(MUTED))
+                                .child(format!("data from {}", p.generated)),
+                        );
                     for a in &p.areas {
                         col = col
-                            .child(div().mt_2().flex().justify_between().child(format!("{} ({})", a.name, if a.measured { "measured" } else { "author estimate" })).child(format!("{:.1}%", a.percent)))
+                            .child(
+                                div()
+                                    .mt_2()
+                                    .flex()
+                                    .justify_between()
+                                    .child(format!(
+                                        "{} ({})",
+                                        a.name,
+                                        if a.measured {
+                                            "measured"
+                                        } else {
+                                            "author estimate"
+                                        }
+                                    ))
+                                    .child(format!("{:.1}%", a.percent)),
+                            )
                             .child(bar(a.percent));
                     }
                 } else if let Some(e) = &self.prog_err {
-                    col = col.child(div().text_color(rgb(BAD)).child(format!("Could not load progress: {e}")));
+                    col = col.child(
+                        div()
+                            .text_color(rgb(BAD))
+                            .child(format!("Could not load progress: {e}")),
+                    );
                 } else {
                     col = col.child("Loading…");
                 }
                 col.into_any_element()
             }
-            _ => div()
-                .flex()
-                .flex_col()
-                .gap_2()
-                .child(div().text_2xl().font_weight(FontWeight::BOLD).child("DeadOxide"))
-                .child("Unofficial compatible runtime for Project Zomboid in Rust. You need your own copy of the game; no game files are distributed.")
-                .child(div().text_color(rgb(RUST2)).child(SITE))
-                .child(div().text_color(rgb(RUST2)).child("https://github.com/LakoMoor/deadoxide"))
-                .child(div().text_color(rgb(MUTED)).child("Mods are installed only after a sha256 check against the catalog."))
-                .into_any_element(),
+            Page::Notes => {
+                let mut col = div().flex().flex_col().gap_3().child(
+                    div()
+                        .text_2xl()
+                        .font_weight(FontWeight::BOLD)
+                        .child("Patch notes"),
+                );
+                for r in &self.notes {
+                    let mut p = panel().p_4().flex().flex_col().gap_1().child(
+                        div()
+                            .font_weight(FontWeight::BOLD)
+                            .child(format!("v{} · {}", r.version, r.date)),
+                    );
+                    for s in &r.new {
+                        p = p.child(div().child(format!("New: {s}")));
+                    }
+                    for s in &r.fixed {
+                        p = p.child(div().text_color(rgb(MUTED)).child(format!("Fixed: {s}")));
+                    }
+                    col = col.child(p);
+                }
+                col.into_any_element()
+            }
+        };
+
+        let status = if self.status.is_empty() {
+            "Ready".to_string()
+        } else {
+            self.status.clone()
         };
         div()
             .size_full()
             .bg(rgb(BG))
             .text_color(rgb(TEXT))
             .flex()
-            .flex_col()
+            .child(sidebar)
             .child(
                 div()
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
                     .flex()
-                    .items_center()
-                    .gap_3()
-                    .px_4()
-                    .py_3()
-                    .border_b_1()
-                    .border_color(rgb(LINE))
+                    .flex_col()
                     .child(
                         div()
-                            .text_xl()
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(rgb(RUST))
-                            .child("DeadOxide"),
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .px_6()
+                            .py_4()
+                            .child(topbar)
+                            .child(div().text_sm().text_color(rgb(MUTED)).child(status)),
                     )
-                    .children(tabs),
-            )
-            .child(div().flex_1().p_4().child(body))
-            .child(
-                div()
-                    .px_4()
-                    .py_2()
-                    .border_t_1()
-                    .border_color(rgb(LINE))
-                    .text_color(rgb(MUTED))
-                    .child(if self.status.is_empty() {
-                        "Ready".to_string()
-                    } else {
-                        self.status.clone()
-                    }),
+                    .child(
+                        div()
+                            .id("scroll")
+                            .flex_1()
+                            .min_w_0()
+                            .w_full()
+                            .overflow_y_scroll()
+                            .px_6()
+                            .pb_6()
+                            .child(div().w_full().child(body)),
+                    ),
             )
     }
 }
 
 fn main() {
     gpui_platform::application().run(|cx: &mut App| {
-        let bounds = Bounds::centered(None, size(px(820.), px(540.)), cx);
+        let bounds = Bounds::centered(None, size(px(1180.), px(780.)), cx);
         cx.open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),

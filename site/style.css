@@ -88,3 +88,10 @@ footer { margin-top: 70px; border-top: 1px solid var(--line); padding: 28px 0 46
 footer .wrap { display: grid; gap: 8px; }
 @media (max-width: 860px) { .hero { grid-template-columns: 1fr; padding-top: 44px; } nav.links { display: none; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } html { scroll-behavior: auto; } }
+.feat { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.feat .f { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; }
+.feat .f b { display: block; font-size: 17px; margin-bottom: 6px; } .feat .f span { color: var(--muted); font-size: 14.5px; }
+.dl { display: flex; gap: 12px; flex-wrap: wrap; }
+.rel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 22px; margin-bottom: 14px; }
+.rel h3 { margin: 0 0 8px; font-size: 18px; } .rel h3 span { color: var(--muted); font-weight: 400; font-size: 14px; margin-left: 8px; font-family: var(--mono); }
+.rel h4 { margin: 12px 0 4px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; } .rel ul { margin: 0; padding-left: 18px; }

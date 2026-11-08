@@ -33,6 +33,20 @@ pub struct Progress {
     pub areas: Vec<Area>,
 }
 
+#[derive(Deserialize, Clone)]
+pub struct Release {
+    pub version: String,
+    pub date: String,
+    #[serde(default)]
+    pub new: Vec<String>,
+    #[serde(default)]
+    pub fixed: Vec<String>,
+}
+#[derive(Deserialize)]
+pub struct Changelog {
+    pub releases: Vec<Release>,
+}
+
 pub fn get_bytes(url: &str) -> Result<Vec<u8>, String> {
     if let Some(p) = url.strip_prefix("file:") {
         let mut v = std::fs::read(p).map_err(|e| e.to_string())?;
