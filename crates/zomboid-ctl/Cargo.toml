@@ -1,0 +1,8 @@
+[package]
+name = "zomboid-ctl"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+zomboid-content = { path = "../zomboid-content" }
+anyhow = "1"
+png = "0.17"

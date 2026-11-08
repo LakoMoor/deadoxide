@@ -1,0 +1,9 @@
+[package]
+name = "zomboid-lua"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+mlua = { version = "0.10", features = ["lua51", "vendored"] }
+anyhow = "1"
+serde_json = "1"
+zomboid-content = { path = "../zomboid-content" }

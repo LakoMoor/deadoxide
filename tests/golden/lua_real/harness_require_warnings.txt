@@ -1,0 +1,13 @@
+-- lua warnings (harness) --
+      5 recursive require(): media/lua/server/WorldGen/WorldGen.lua
+      1 recursive require(): media/lua/server/WorldGen/attachments/Priorities.lua
+      1 require("BuildingObjects/ISAnimalPickMateCursor") failed
+      1 require("Camping/CCampfireSystem") failed
+      1 require("ISUI/ISContextMenu") failed
+      1 require("ISUI/ISInventoryPaneContextMenu") failed
+      1 require("ISUI/ISVehicleMenu") failed
+      2 require("ISUI/InventoryWindow/ISLootWindowControlHandler") failed
+      1 require("ISUI/PlayerData/ISPlayerData") failed
+      1 require("TimedActions/ISInventoryTransferAction") failed
+      1 require("pzapi/ui/ui") failed
+Initializing Randomized World Tabletop Clutter Tables

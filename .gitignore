@@ -1,0 +1,20 @@
+# build output
+target/
+# isolated game profile: saves, logs, caches of the real game. Never commit.
+profile/
+tests/out/
+# the game's own files and anything derived from its decompiled code
+media/
+*.jar
+rea_out/
+decompiled/
+# scratch
+*.tmp
+.claude/settings.local.json
+
+# large debug renders (the site uses 1280px thumbnails in site/assets/gallery)
+screenshots/port_zones_*.png
+screenshots/port_all_levels.png
+screenshots/port_cpu_*.png
+screenshots/port_z0_before_alignment.png
+tests/golden/spawn_rosewood/port_*.png

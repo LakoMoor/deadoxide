@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["launcher", "crates/zomboid-lua", "crates/zomboid-client", "crates/zomboid-content", "crates/zomboid-ctl"]
+
+[profile.dev]
+opt-level = 1
+[profile.release]
+lto = "thin"
+codegen-units = 1

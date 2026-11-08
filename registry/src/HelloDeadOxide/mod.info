@@ -1,0 +1,5 @@
+name=Hello DeadOxide
+id=HelloDeadOxide
+description=Sample mod: prints a line to the log at game boot.
+author=DeadOxide
+modversion=1.0.0

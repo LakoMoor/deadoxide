@@ -1,0 +1,14 @@
+{
+    "schema":  1,
+    "mods":  [
+                 {
+                     "id":  "HelloDeadOxide",
+                     "name":  "Hello DeadOxide",
+                     "description":  "Пример мода: пишет строку в лог при запуске. Показывает формат каталога.",
+                     "sha256":  "79f9db61b4e683069c5e1658b4a928d61a4aac5b2738698b35cf1e64681aae04",
+                     "author":  "DeadOxide",
+                     "url":  "mods/HelloDeadOxide-1.0.0.zip",
+                     "version":  "1.0.0"
+                 }
+             ]
+}

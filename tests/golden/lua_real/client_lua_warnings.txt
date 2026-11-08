@@ -1,0 +1,23 @@
+      5 recursive require(): media/lua/server/WorldGen/WorldGen.lua
+      2 require("ISUI/InventoryWindow/ISLootWindowControlHandler") failed
+      1 require("pzapi/ui/ui") failed
+      1 require("TimedActions/ISInventoryTransferAction") failed
+      1 require("ISUI/PlayerData/ISPlayerData") failed
+      1 require("ISUI/ISVehicleMenu") failed
+      1 require("ISUI/ISInventoryPaneContextMenu") failed
+      1 require("ISUI/ISContextMenu") failed
+      1 require("Camping/CCampfireSystem") failed
+      1 require("BuildingObjects/ISAnimalPickMateCursor") failed
+      1 recursive require(): media/lua/server/WorldGen/attachments/Priorities.lua
+      1 namedColorToTable color not found: ProgressYellow
+      1 can't find map objects file: media/maps/West Point, KY/objects.lua
+      1 can't find map objects file: media/maps/Valley Station, KY/objects.lua
+      1 can't find map objects file: media/maps/Rosewood, KY/objects.lua
+      1 can't find map objects file: media/maps/Riverside, KY/objects.lua
+      1 can't find map objects file: media/maps/March Ridge, KY/objects.lua
+      1 can't find map objects file: media/maps/Irvington, KY/objects.lua
+      1 can't find map objects file: media/maps/Fallas Lake, KY/objects.lua
+      1 can't find map objects file: media/maps/Ekron, KY/objects.lua
+      1 can't find map objects file: media/maps/Echo Creek, KY/objects.lua
+      1 can't find map objects file: media/maps/Brandenburg, KY/objects.lua
+      1 ERROR: Mannequin zone missing properties in media/maps/Muldraugh, KY/objects.lua coords: 13583, 1299, 0

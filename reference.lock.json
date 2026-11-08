@@ -1,0 +1,11 @@
+{
+  "game": "Project Zomboid",
+  "steam_appid": 108600,
+  "steam_buildid": "25485521",
+  "jar": "projectzomboid.jar",
+  "jar_sha256": "E1A69EB743EDE60B213A0FE7F8B83D4FCAB773036D256CC4543A336F3B058A33",
+  "jar_mtime": "2026-09-28T20:54:11",
+  "platform": "win64",
+  "game_version_reported_in_ui": "42.21.0 4a0e9546ec pzBullet(1.0.0.28)",
+  "install_root_policy": "read-only; never write into the game folder except this zomboid-rs workspace"
+}

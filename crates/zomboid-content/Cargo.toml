@@ -1,0 +1,8 @@
+[package]
+name = "zomboid-content"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+sha2 = "0.10"
+png = "0.17"
+rusqlite = { version = "0.32", features = ["bundled"] }
