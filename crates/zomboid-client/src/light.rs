@@ -36,6 +36,38 @@ pub fn combine_max(acc: [u8; 3], light: [i32; 3]) -> [u8; 3] {
     ]
 }
 
+/// One entry of a square's light list (Lighting64.dll: colour bytes, path distance, radius byte).
+#[allow(dead_code)]
+pub struct ListedLight {
+    pub rgb: [u8; 3],
+    pub dist: f32,
+    pub radius: u8,
+}
+
+/// Lighting64.dll FUN_180003970: per-channel MAX over the list of `channel * (1 - dist / radius)`
+/// (integer truncation), starting from `start`; outdoor squares start from at least the ambient colour.
+#[allow(dead_code)]
+pub fn square_colour(
+    start: [i32; 3],
+    lights: &[ListedLight],
+    outdoors: bool,
+    ambient: [u8; 3],
+) -> [i32; 3] {
+    let mut c = start;
+    if outdoors {
+        for (ch, a) in c.iter_mut().zip(ambient) {
+            *ch = (*ch).max(i32::from(a));
+        }
+    }
+    for l in lights {
+        let k = 1.0 - l.dist / f32::from(l.radius);
+        for (ch, v) in c.iter_mut().zip(l.rgb) {
+            *ch = (*ch).max((f32::from(v) * k) as i32);
+        }
+    }
+    c
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,6 +93,32 @@ mod tests {
         // same colour from two lights: max, so the stronger one wins instead of adding up.
         let c = point_light_rgb(4.0, 8.0, 1.0, [1.0; 3]).unwrap();
         assert_eq!(combine_max(combine_max([0; 3], c), c), [219, 219, 219]);
+    }
+
+    #[test]
+    fn square_colour_takes_max_of_linear_falloffs_with_outdoor_floor() {
+        let lights = [
+            ListedLight {
+                rgb: [200, 100, 0],
+                dist: 2.0,
+                radius: 8,
+            }, // k = 0.75 -> 150, 75, 0
+            ListedLight {
+                rgb: [100, 255, 0],
+                dist: 4.0,
+                radius: 8,
+            }, // k = 0.5  -> 50, 127, 0
+        ];
+        assert_eq!(
+            square_colour([0; 3], &lights, false, [30, 30, 60]),
+            [150, 127, 0]
+        );
+        // outdoors the ambient colour is a floor: blue 60 survives, red/green come from the lights.
+        assert_eq!(
+            square_colour([0; 3], &lights, true, [30, 30, 60]),
+            [150, 127, 60]
+        );
+        assert_eq!(square_colour([0; 3], &[], true, [30, 30, 60]), [30, 30, 60]);
     }
 
     #[test]
