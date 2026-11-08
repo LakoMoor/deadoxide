@@ -192,3 +192,8 @@ if ((SandboxOptions.lore.speed.getValue() == 1 && !this.inactive) || this.speedT
 if (v.getLength() > a2) v.setLength(a2)
 ```
 Resolved: constants 24, 1.0, 1.3, 0.006, 0.08 and the branch conditions (pc 62 `if_icmpne`, pc 69 `ifeq`, pc 77 `if_icmpne`). UNKNOWN: what `a1` and `a2` are at the call sites, what `getSpeedMod()` returns, the length-per-tick to tiles-per-second scale, and whether `inactive` means what its name suggests. Not applied to the sim: without those the numbers cannot be turned into a speed in tiles/s, so `sim.rs` keeps its PLACEHOLDER.
+
+### CORRECTION: `getZombieWalkTowardSpeed` is probably dead code
+
+`node tools/jargrep.mjs ../projectzomboid.jar getZombieWalkTowardSpeed` finds the name only in `zombie/characters/IsoZombie` itself, and no method of IsoZombie calls it. No class in the jar references it (a Lua call would need a binding, none found by name). So the formula read above is most likely unused in 42.21.0 and must NOT be taken as the zombie movement speed. By contrast `getZombieLungeSpeed` is referenced by `zombie/ai/states/LungeState`. Real walking speed is probably driven by the animation/walk type (`walkType`, `speedType`); that path is not read yet.
+Tools: `tools/jargrep.mjs <jar> <string>` lists classes whose constant pool contains the string.
