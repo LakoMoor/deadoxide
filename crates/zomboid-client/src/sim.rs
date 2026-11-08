@@ -136,6 +136,26 @@ mod tests {
 // ---- fixed-step world: deterministic tick, seeded RNG, placeholder zombies ----
 // PLACEHOLDER BEHAVIOUR: zombie speed/vision/wander rules below are NOT measured from the original game.
 
+/// Compile-time constants of `zombie.characters.IsoZombie` read from the class file (`node tools/classdump.mjs ../projectzomboid.jar zombie/characters/IsoZombie`).
+/// These are facts about names and constants only: HOW the game combines them (vision falloff, fog, rain, darkness) is UNKNOWN and not yet used by the sim.
+#[allow(dead_code)]
+pub mod iso_zombie_constants {
+    pub const VISION_RADIUS_MIN: f32 = 10.0;
+    pub const VISION_RADIUS_MAX: f32 = 20.0;
+    pub const VISION_FOG_PENALTY_MAX: f32 = 7.0;
+    pub const VISION_RAIN_PENALTY_MAX: f32 = 2.5;
+    pub const VISION_DARKNESS_PENALTY_MAX: f32 = 5.0;
+    pub const HEARING_UNSEEN_OFFSET_MIN: i32 = 2;
+    pub const HEARING_UNSEEN_OFFSET_HEAVY_RAIN: i32 = 5;
+    pub const HEARING_UNSEEN_OFFSET_MAX: i32 = 10;
+    pub const LUNGE_TIME: f32 = 180.0;
+    pub const EAT_BODY_DIST: f32 = 1.0;
+    pub const EAT_BODY_TIME: f32 = 3600.0;
+    pub const CRAWLER_DAMAGE_RANGE: f32 = 1.5;
+    pub const ALLOW_REPATH_DELAY_MAX: i32 = 120;
+    // speedType: SPRINTER=1, FAST_SHAMBLER=2, SHAMBLER=3, RANDOM=4; hearing: PINPOINT=1, NORMAL=2, POOR=3, RANDOM=4, NORMAL_OR_POOR=5
+}
+
 pub const TICK_HZ: f32 = 30.0;
 
 /// xorshift64*: explicit, seedable, no global state.
