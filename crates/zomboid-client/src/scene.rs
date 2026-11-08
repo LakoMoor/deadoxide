@@ -269,7 +269,14 @@ impl Scene {
     /// zombie.iso.IsoCell.SetCutawayRoomsForPlayer (read from the class file, see docs/COMPATIBILITY.md): the real game shows the player's room
     /// plus the rooms at (x+-1.5, y+-1.5) that the player can see and that lie in front of the facing direction. `probes` adds the four
     /// probe squares WITHOUT the can-see and facing tests (the port has neither yet), so it can over-reveal.
-    pub fn retain_rooms(&mut self, px: f32, py: f32, z: i32, probes: bool) -> Option<i32> {
+    pub fn retain_rooms(
+        &mut self,
+        px: f32,
+        py: f32,
+        z: i32,
+        probes: bool,
+        los: Option<f32>,
+    ) -> Option<i32> {
         let rid = *self.rooms.get(&(px.floor() as i32, py.floor() as i32, z))?;
         let mut set = vec![rid];
         if probes {
@@ -291,10 +298,25 @@ impl Scene {
                 .iter()
                 .any(|&(dx, dy)| matches!(self.rooms.get(&(x + dx, y + dy, zz)), Some(r) if set.contains(r)))
         };
+        // EXPERIMENT: squares within `radius` that the player has line of sight to (walls block; see `Collision::los`).
+        let mut seen = std::collections::HashSet::new();
+        if let Some(rad) = los {
+            let r = rad.ceil() as i32;
+            for x in (px.floor() as i32 - r)..=(px.floor() as i32 + r) {
+                for y in (py.floor() as i32 - r)..=(py.floor() as i32 + r) {
+                    let (cx, cy) = (x as f32 + 0.5 - px, y as f32 + 0.5 - py);
+                    if cx * cx + cy * cy <= rad * rad && self.collision.los((px, py), (x, y), z) {
+                        seen.insert((x, y));
+                    }
+                }
+            }
+        }
         let keep: Vec<bool> = self
             .meta
             .iter()
-            .map(|&(x, y, zz, r)| set.contains(&r) || (r < 0 && near(x, y, zz)))
+            .map(|&(x, y, zz, r)| {
+                set.contains(&r) || (r < 0 && near(x, y, zz)) || (zz == z && seen.contains(&(x, y)))
+            })
             .collect();
         let (mut inst, mut meta) = (vec![], vec![]);
         for (i, k) in keep.iter().enumerate() {

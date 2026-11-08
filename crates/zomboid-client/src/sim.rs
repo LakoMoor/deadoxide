@@ -33,6 +33,41 @@ impl Collision {
     pub fn blocked(&self, x: i32, y: i32, z: i32) -> bool {
         self.f(x, y, z) & BLOCK != 0
     }
+    /// Line of sight from a point to the centre of a square (walls/solid squares block; doors and windows are see-through, as in `can_step`).
+    /// EXPERIMENT: not yet diffed against the real game beyond three frames.
+    pub fn los(&self, from: (f32, f32), to: (i32, i32), z: i32) -> bool {
+        let (tx, ty) = (to.0 as f32 + 0.5, to.1 as f32 + 0.5);
+        let (dx, dy) = (tx - from.0, ty - from.1);
+        let n = ((dx.abs().max(dy.abs())) * 8.0).ceil().max(1.0) as i32;
+        let mut cur = (from.0.floor() as i32, from.1.floor() as i32);
+        for i in 1..=n {
+            let t = i as f32 / n as f32;
+            let sq = (
+                (from.0 + dx * t).floor() as i32,
+                (from.1 + dy * t).floor() as i32,
+            );
+            if sq == cur {
+                continue;
+            }
+            let ok = if sq.0 != cur.0 && sq.1 != cur.1 {
+                let a = (sq.0, cur.1);
+                let b = (cur.0, sq.1);
+                (self.can_step(cur, a, z) && self.can_step(a, sq, z))
+                    || (self.can_step(cur, b, z) && self.can_step(b, sq, z))
+            } else {
+                self.can_step(cur, sq, z)
+            };
+            // the target square itself is seen even if it is a wall square
+            if !ok && sq != to {
+                return false;
+            }
+            if !ok {
+                return true;
+            }
+            cur = sq;
+        }
+        true
+    }
     /// Can an actor move between two edge-adjacent squares?
     pub fn can_step(&self, from: (i32, i32), to: (i32, i32), z: i32) -> bool {
         if self.blocked(to.0, to.1, z) {

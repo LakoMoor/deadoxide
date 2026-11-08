@@ -596,7 +596,15 @@ fn main() -> anyhow::Result<()> {
             if let Some((px, py)) = pl {
                 println!(
                     "lit-room: {:?}, instances now {}",
-                    scene.retain_rooms(px, py, 0, a.iter().any(|s| s == "--probe-rooms")),
+                    scene.retain_rooms(
+                        px,
+                        py,
+                        0,
+                        a.iter().any(|s| s == "--probe-rooms"),
+                        a.iter()
+                            .position(|s| s == "--los")
+                            .and_then(|j| a[j + 1].parse().ok())
+                    ),
                     scene.instances.len()
                 );
             }

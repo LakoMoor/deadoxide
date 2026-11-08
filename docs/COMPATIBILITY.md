@@ -259,3 +259,18 @@ Test of the simplest reading (`zomboid-client --lit-room --probe-rooms`: add the
 
 First bytes (big-endian): `01 01`, 8 zero bytes, then float x at offset 10, float y at 14 (both match the `x`/`y` columns exactly: 8306.65625 / 11692.8720703125), float z at 18 (0.0), then `00 00 00 05` at 22..25. `05` read as `IsoDirections` is SE (N=0, NW=1, W=2, SW=3, S=4, SE=5, E=6, NE=7), which agrees with the walk that produced this save (+0.83, +1.21 in x/y, i.e. south-east). UNVERIFIED guess: one frame only; a second save with a different facing is needed to confirm that offset 25 is the facing.
 Consequence for the visibility rule: the +-1.5 probe squares do not reveal the kitchen at position 1 even with facing SE (they land in the livingroom, see the previous section), so the facing field does not explain the real frame. Remaining hypothesis (NOT tested): the real game draws every square the player has line of sight to (a vision cone, blocked by walls/closed doors, widened by windows and open doors) and cuts away only walls that hide the player; the port's "player's room only" mask is a special case of that. Testing it needs a line-of-sight pass over the wall/door data (`Scene::collision` has wall edges) and 4+ real frames at known positions.
+
+## Line-of-sight experiment (`zomboid-client --lit-room --los <radius>`) — mixed, opt-in only
+
+`Collision::los` walks the segment from the player to a square centre in 1/8-square steps and refuses to cross a blocked square or a wall edge (doors and windows see-through, like `can_step`). `--los R` keeps instances on squares within R tiles that have line of sight, on top of the room mask.
+Whole-frame mean|luma diff| of 255 (position 0 and 1 from run 3, 1710x1074; frame 1 from run 1, 1920x1050):
+
+| radius | position 0 | position 1 | frame 1 |
+|---|---|---|---|
+| off | 27.17 | 28.01 | 15.16 |
+| 3 | 26.09 | 27.80 | 15.20 |
+| 5 | 24.35 | 29.26 | 14.79 |
+| 7 | 22.64 | 30.72 | 14.71 |
+| 10 | 18.97 | 31.39 | 12.19 |
+
+It helps two frames (the real game does reveal squares beyond the room) and hurts position 1: at radius 10 the port also draws the bathroom/bedroom to the west, the opaque south exterior wall and a lot of grass, none of which the real frame shows (checked by eye in `tests/out/l1_10.png`). So line of sight alone is not the rule: missing pieces are the cutaway of camera-facing walls, a vision cone/light limit (night: only lit squares are drawn) and probably the facing direction. The flag stays OFF by default; do not quote 12.19 as a result, the three-frame mean (23.45 -> 20.85 at radius 10) hides a regression.
