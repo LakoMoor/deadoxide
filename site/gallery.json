@@ -17,6 +17,14 @@
       "caption": "A second oracle: the character walked a few tiles, position read from the save. The camera and the wall cutaway rule were checked on this frame without tuning; the ambient factor was chosen on frame 1 and confirmed here by a sweep (27.1 to 26.1). Most of the remaining difference is lighting."
     },
     {
+      "id": "p1",
+      "title": "Third position (does not match yet)",
+      "game": "assets/gallery/game_run3_p1.png",
+      "port": "assets/gallery/port_run3_p1.png",
+      "diff": 28.01,
+      "caption": "A new run of the real game, character one step south of the spawn (position read from the save). The camera and room geometry still line up, but the real game cuts away the south-west wall and shows the next room (a fridge) through it, while the port draws the whole wall and only the player's room. The visibility rule fitted on two frames does not carry over; this frame is kept on purpose."
+    },
+    {
       "id": "nomask",
       "title": "Before: without the visibility mask",
       "game": "assets/gallery/game_clean2.png",
@@ -26,6 +34,10 @@
     }
   ],
   "portOnly": [
-    { "src": "assets/gallery/port_gpu_cell41_39.png", "title": "Cell 41_39, GPU rendering", "caption": "Muldraugh: tiles, floors and draw order read straight from the game's files." }
+    {
+      "src": "assets/gallery/port_gpu_cell41_39.png",
+      "title": "Cell 41_39, GPU rendering",
+      "caption": "Muldraugh: tiles, floors and draw order read straight from the game's files."
+    }
   ]
 }
