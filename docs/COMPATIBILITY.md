@@ -288,3 +288,9 @@ Earlier note, kept for history (the REA route):
 - BLOCKED: REA `open_binary` succeeds, but every analysis call fails with `provider_unavailable`: Ghidra is configured at `E:\tools\ghidra_12.1.4_PUBLIC` and that folder has no `application.properties`/`analyzeHeadless.bat` (the install is missing or incomplete). Hopper, IDA and Kuna are not usable on this host.
 - UNKNOWN: the light falloff, colour and room-light model. Nothing was read from the DLL.
 - To unblock: install a full Ghidra release and point `GHIDRA_INSTALL_DIR` at it.
+
+### getSquareLighting decompiled (Ghidra headless, read by hand)
+
+- MEASURED: `getSquareLighting(playerIndex<4, x, y, z<64, int[] out)` only marshals precomputed per-square data into an int array of at least 43 entries (else `IllegalArgumentException: output array is too small`). It does no lighting maths. Per square it copies: a 3-bit flag word (bits 0-2 of one byte), 3 colour bytes, two floats scaled by a double constant, nine more 32-bit words, then a light list capped at 5 entries (7 floats each: id, position, colour packed as RGB bytes divided by a float constant 255-style, strength). When more than 5 lights reach a square, the weakest (by strength/radius ratio, via `FUN_180001f90`) is replaced.
+- Consequence: the falloff and colour maths live in the update pass (`stateEndUpdate`, 0x180016370, 3737 bytes) and its helpers, not here. The constants `DAT_1800784ac/b0` and `_DAT_180078758` are not read yet. UNKNOWN: everything numeric.
+- Local scripts: Ghidra headless scripts live outside the repo (scratchpad); they use the game's DLL and are not committed.
