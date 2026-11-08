@@ -596,7 +596,7 @@ fn main() -> anyhow::Result<()> {
             if let Some((px, py)) = pl {
                 println!(
                     "lit-room: {:?}, instances now {}",
-                    scene.retain_room(px, py, 0),
+                    scene.retain_rooms(px, py, 0, a.iter().any(|s| s == "--probe-rooms")),
                     scene.instances.len()
                 );
             }

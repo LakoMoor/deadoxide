@@ -267,18 +267,38 @@ impl Scene {
     /// Keeps instances whose square is in the player's room, plus room-less squares touching it (walls/doors), at every level.
     /// Does nothing if the player's square has no room. Light spill from sources (door cone) is NOT modelled.
     pub fn retain_room(&mut self, px: f32, py: f32, z: i32) -> Option<i32> {
+        self.retain_rooms(px, py, z, false)
+    }
+
+    /// zombie.iso.IsoCell.SetCutawayRoomsForPlayer (read from the class file, see docs/COMPATIBILITY.md): the real game shows the player's room
+    /// plus the rooms at (x+-1.5, y+-1.5) that the player can see and that lie in front of the facing direction. `probes` adds the four
+    /// probe squares WITHOUT the can-see and facing tests (the port has neither yet), so it can over-reveal.
+    pub fn retain_rooms(&mut self, px: f32, py: f32, z: i32, probes: bool) -> Option<i32> {
         let rid = *self.rooms.get(&(px.floor() as i32, py.floor() as i32, z))?;
+        let mut set = vec![rid];
+        if probes {
+            for (dx, dy) in [(-1.5f32, -1.5f32), (1.5, -1.5), (-1.5, 1.5), (1.5, 1.5)] {
+                if let Some(&r) =
+                    self.rooms
+                        .get(&((px + dx).floor() as i32, (py + dy).floor() as i32, z))
+                {
+                    if r >= 0 && !set.contains(&r) {
+                        set.push(r);
+                    }
+                }
+            }
+        }
         // "Cutaway" rule measured on two real frames: a room-less square is kept only when the player's room lies on its +x or +y side,
         // i.e. walls on the north/west edges. Walls on the south/east edges (facing the camera) are not drawn by the real game.
         let near = |x: i32, y: i32, zz: i32| {
             [(0, 0), (1, 0), (0, 1)]
                 .iter()
-                .any(|&(dx, dy)| self.rooms.get(&(x + dx, y + dy, zz)) == Some(&rid))
+                .any(|&(dx, dy)| matches!(self.rooms.get(&(x + dx, y + dy, zz)), Some(r) if set.contains(r)))
         };
         let keep: Vec<bool> = self
             .meta
             .iter()
-            .map(|&(x, y, zz, r)| r == rid || (r < 0 && near(x, y, zz)))
+            .map(|&(x, y, zz, r)| set.contains(&r) || (r < 0 && near(x, y, zz)))
             .collect();
         let (mut inst, mut meta) = (vec![], vec![]);
         for (i, k) in keep.iter().enumerate() {
