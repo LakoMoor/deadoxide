@@ -1,26 +1,26 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DeadOxide — Project Zomboid на Rust: сколько перенесено</title>
-<meta name="description" content="DeadOxide — неофициальный совместимый рантайм Project Zomboid на Rust поверх вашей собственной копии игры. Честный прогресс, сравнение с оригиналом, лаунчер и моды.">
+<title>DeadOxide: Project Zomboid in Rust, and how much is done</title>
+<meta name="description" content="DeadOxide is an unofficial compatible runtime for Project Zomboid in Rust, built over your own copy of the game. Honest progress, comparisons with the original, a launcher and mods.">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="nav"><div class="wrap">
   <a class="brand" href="#top"><img src="assets/icon-256.png" alt="">DeadOxide</a>
-  <nav class="links"><a href="#progress">Прогресс</a><a href="#compare">Сравнение</a><a href="#launcher">Лаунчер</a><a href="#mods">Моды</a><a href="https://github.com/LakoMoor/deadoxide">GitHub</a></nav>
+  <nav class="links"><a href="#progress">Progress</a><a href="#compare">Comparison</a><a href="#launcher">Launcher</a><a href="#mods">Mods</a><a href="https://github.com/LakoMoor/deadoxide">GitHub</a></nav>
 </div></header>
 
 <main class="wrap" id="top">
   <div class="hero">
     <div>
-      <span class="pill">неофициальный проект · ранняя стадия</span>
-      <h1>Project Zomboid, переписанный на <em>Rust</em></h1>
-      <p class="lead">Совместимый рантайм, который читает файлы вашей собственной копии игры: карты, тайлы, Lua-скрипты, сохранения. Здесь честно показано, сколько уже работает и чем это проверено.</p>
-      <div class="cta"><a class="btn primary" href="#launcher">Скачать лаунчер</a><a class="btn" href="#compare">Сравнить с оригиналом</a></div>
+      <span class="pill">unofficial project · early stage</span>
+      <h1>Project Zomboid, rewritten in <em>Rust</em></h1>
+      <p class="lead">A compatible runtime that reads the files of your own copy of the game: maps, tiles, Lua scripts, saves. This page shows honestly how much already works and how each number was checked.</p>
+      <div class="cta"><a class="btn primary" href="#launcher">Get the launcher</a><a class="btn" href="#compare">Compare with the original</a></div>
     </div>
     <div class="ring-card">
       <div class="ring">
@@ -29,49 +29,49 @@
           <circle id="ring-fg" class="fg" cx="120" cy="120" r="104" fill="none" stroke-width="16"/></svg>
         <div class="num"><span><span id="overall">0</span><small>%</small></span></div>
       </div>
-      <div class="cap">перенесено в целом (взвешенная оценка)</div>
+      <div class="cap">ported overall (weighted estimate)</div>
       <div class="cap" id="updated" style="margin-top:6px"></div>
     </div>
   </div>
 
   <section id="progress">
-    <h2>Прогресс по областям</h2>
-    <p class="sub">Область помечена «измерено», если её процент считает команда на реальных файлах игры. «Оценка автора» — это мнение, а не измерение. Нажмите на область, чтобы увидеть способ подсчёта.</p>
+    <h2>Progress by area</h2>
+    <p class="sub">An area is tagged "measured" when a command computes its percentage on real game files. "Author estimate" is an opinion, not a measurement. Click an area to see how it is counted.</p>
     <div class="areas" id="areas"></div>
     <div class="stats" id="stats"></div>
-    <p class="note" style="margin-top:22px">Двадцать процентов — это не «пятая часть игры можно играть». Играть пока нельзя: зомби, инвентарь, крафт, звук и сеть не сделаны. Готова основа: чтение форматов, запуск Lua и картинка мира.</p>
+    <p class="note" style="margin-top:22px">Twenty percent does not mean a fifth of the game is playable. It is not playable yet: zombies, inventory, crafting, sound and networking are not done. What exists is the foundation: format readers, running the game's Lua, and a picture of the world.</p>
   </section>
 
   <section id="compare">
-    <h2>Порт против оригинала</h2>
-    <p class="sub">Тяните ползунок. Слева настоящая игра, справа порт с тем же положением персонажа. Число рядом с названием — средняя разница пикселей из 255, чем меньше, тем ближе.</p>
+    <h2>Port vs. the original</h2>
+    <p class="sub">Drag the slider. The real game is on the left, the port with the same character position on the right. The number next to each title is the mean pixel difference out of 255; lower is closer.</p>
     <div id="compare-list"></div>
     <div class="grid2" id="portonly"></div>
-    <p class="note" style="margin-top:18px">Скриншоты оригинальной игры показаны как свидетельство сравнения. Права на игру принадлежат The Indie Stone. Если вы правообладатель и против, напишите в репозиторий, снимки будут убраны.</p>
+    <p class="note" style="margin-top:18px">Screenshots of the original game are shown as evidence for the comparison. The game belongs to The Indie Stone. If you are the rights holder and object, open an issue in the repository and they will be removed.</p>
   </section>
 
   <section id="launcher">
-    <h2>Лаунчер</h2>
-    <p class="sub">Окно с вкладками «Играть», «Моды», «Прогресс». Находит вашу установку Project Zomboid, запускает клиент порта или оригинал с отдельным профилем, ставит моды из каталога с проверкой sha256.</p>
+    <h2>Launcher</h2>
+    <p class="sub">A GPUI window with Play, Mods and Progress tabs. It finds your Project Zomboid install, starts the port's client or the original game with a separate profile, and installs mods from the catalog with a sha256 check.</p>
     <div class="panel">
-      <p>Сборка из исходников (нужен Rust):</p>
+      <p>Build from source (Rust required):</p>
       <pre>git clone https://github.com/LakoMoor/deadoxide
 cd deadoxide
 cargo run --release -p deadoxide-launcher</pre>
-      <p style="margin-bottom:0">Готовые сборки появятся в <a href="https://github.com/LakoMoor/deadoxide/releases">релизах</a>, когда проект дойдёт до первой.</p>
+      <p style="margin-bottom:0">Prebuilt binaries will appear in <a href="https://github.com/LakoMoor/deadoxide/releases">Releases</a> once there is a first one.</p>
     </div>
   </section>
 
   <section id="mods">
-    <h2>Каталог модов</h2>
-    <p class="sub">Моды здесь только те, что опубликованы с разрешения авторов. Лаунчер скачивает архив, сверяет sha256 из каталога и распаковывает в папку модов игры. Добавить свой мод можно пул-реквестом в <code>registry/index.json</code>.</p>
+    <h2>Mod catalog</h2>
+    <p class="sub">Only mods published with the author's permission are listed. The launcher downloads the archive, checks the sha256 from the catalog and extracts it into the game's mods folder. To add yours, open a pull request against <code>registry/index.json</code>.</p>
     <div class="mods" id="mods-list"></div>
   </section>
 </main>
 
 <footer><div class="wrap">
-  <div>DeadOxide — неофициальный проект, не связан с The Indie Stone. Игровые файлы в репозиторий не входят: нужна ваша собственная копия Project Zomboid.</div>
-  <div><a href="https://github.com/LakoMoor/deadoxide">Исходники</a> · по образцу <a href="https://github.com/horizon-rust/horizon">Horizon</a></div>
+  <div>DeadOxide is an unofficial project and is not affiliated with The Indie Stone. No game files are included: you need your own copy of Project Zomboid.</div>
+  <div><a href="https://github.com/LakoMoor/deadoxide">Source</a> · modelled on <a href="https://github.com/horizon-rust/horizon">Horizon</a></div>
 </div></footer>
 <script src="app.js"></script>
 </body>

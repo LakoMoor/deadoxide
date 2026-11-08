@@ -2,113 +2,113 @@
   "generated": "2026-11-08",
   "game": "Project Zomboid 42.21.0 (Steam build 25485521)",
   "overall": 20.3,
-  "note": "Общий процент — взвешенная оценка. Измеренные области считаются командами (см. how/facts), остальные — оценка автора и помечены measured:false.",
+  "note": "The overall percentage is a weighted estimate. Measured areas are computed by commands (see how/facts); the rest are author estimates, marked measured:false.",
   "areas": [
     {
       "id": "formats",
-      "name": "Читаем файлы игры",
+      "name": "Reading the game's files",
       "weight": 15,
       "measured": true,
       "score": 0.5,
-      "how": "доля семейств форматов игры, которые мы читаем (список ниже); внутри каждого семейства покрытие тоже неполное",
+      "how": "share of the game's format families we read (list below); coverage inside each family is also incomplete",
       "facts": [
-        "семейств форматов прочитано: 8 из 16",
-        "заголовок ячейки разобран: 120687 из 123391 байт",
-        "имена тайлов разрешены: 25981 из 26063",
-        "зон карты Muldraugh: 37389",
-        "не читаем: 3D-модели и анимации, звуковые банки FMOD, шрифты (.fnt), скрипты рецептов и транспорта, остальные файлы сохранения (map_*.bin, чанки), хвост заголовка ячейки, раскладка интерфейса и текстуры UI, загрузка модов"
+        "format families read: 8 of 16",
+        "cell header parsed: 120687 of 123391 bytes",
+        "tile names resolved: 25981 of 26063",
+        "Muldraugh map zones: 37389",
+        "not read: 3D models and animations, FMOD sound banks, fonts (.fnt), recipe and vehicle scripts, other save files (map_*.bin, chunks), cell header tail, UI layout and UI textures, mod loading"
       ],
       "percent": 50
     },
     {
       "id": "lua",
-      "name": "Lua-скрипты игры работают",
+      "name": "The game's Lua scripts run",
       "weight": 20,
       "measured": true,
       "score": 0.19971326164874553,
-      "how": "файлов Lua выполняется без ошибки (20% веса области: запуск ≠ корректность), остальное — реальное Java API, которого пока почти нет (оценка автора: ~0)",
+      "how": "Lua files that execute without error, counted as 20% of the area weight (running is not the same as correct); the rest is the real Java API, which barely exists yet (author estimate: ~0)",
       "facts": [
-        "Lua-файлов без ошибки: 1393 из 1395",
-        "неопределённых Java-имён, которые трогает Lua: 121",
-        "строк лога реального клиента воспроизведено: 22 видов"
+        "Lua files without error: 1393 of 1395",
+        "undefined Java names the Lua touches: 121",
+        "real-client log line kinds reproduced: 22"
       ],
       "percent": 20
     },
     {
       "id": "render",
-      "name": "Картинка мира",
+      "name": "World rendering",
       "weight": 20,
       "measured": true,
       "score": 0.36441666666666667,
-      "how": "похожесть кадра на игру 1 − (разница/60), умноженная на 0,5: освещения, персонажей, погоды и анимаций пока нет",
+      "how": "frame similarity to the game, 1 - (diff/60), times 0.5: lighting, characters, weather and animation are not there yet",
       "facts": [
-        "разница кадра 1 с игрой: 16.27 из 255",
-        "разница кадра 2 (контрольный): 27.09 из 255",
-        "без маски видимости было: 79.68 из 255"
+        "frame 1 difference from the game: 16.27 of 255",
+        "frame 2 (held-out) difference: 27.09 of 255",
+        "before the visibility mask: 79.68 of 255"
       ],
       "percent": 36.4
     },
     {
       "id": "sim",
-      "name": "Геймплей и зомби",
+      "name": "Gameplay and zombies",
       "weight": 25,
       "measured": false,
       "score": 0.03,
-      "how": "оценка автора: есть шаг 30 Гц, движение и столкновения упрощённо; зомби — заглушки с выдуманными параметрами",
+      "how": "author estimate: a 30 Hz step, movement and collision exist in simplified form; zombies are placeholders with invented parameters",
       "facts": [
-        "движение игрока и столкновения (упрощённо)",
-        "зомби: заглушка",
-        "инвентарь, крафт, навыки, здоровье: нет"
+        "player movement and collision (simplified)",
+        "zombies: placeholder",
+        "inventory, crafting, skills, health: none"
       ],
       "percent": 3
     },
     {
       "id": "saves",
-      "name": "Сохранения",
+      "name": "Saves",
       "weight": 5,
       "measured": false,
       "score": 0.1,
-      "how": "оценка автора: читаем позицию игрока из players.db; остальное нет",
+      "how": "author estimate: the player position is read from players.db; nothing else",
       "facts": [
-        "позиция игрока читается из настоящего сохранения",
-        "время суток из map_t.bin не расшифровано"
+        "player position is read from a real save",
+        "time of day from map_t.bin is not decoded"
       ],
       "percent": 10
     },
     {
       "id": "ui",
-      "name": "Меню, интерфейс, настройки",
+      "name": "Menus, interface, settings",
       "weight": 5,
       "measured": false,
       "score": 0.05,
-      "how": "оценка автора: окно мира и лаунчер есть, интерфейса игры нет",
+      "how": "author estimate: a world window and a launcher exist, the game's UI does not",
       "facts": [
-        "лаунчер DeadOxide",
-        "HUD, инвентарь, окна: нет"
+        "DeadOxide launcher",
+        "HUD, inventory, windows: none"
       ],
       "percent": 5
     },
     {
       "id": "audio",
-      "name": "Звук",
+      "name": "Audio",
       "weight": 5,
       "measured": false,
       "score": 0,
-      "how": "оценка автора",
+      "how": "author estimate",
       "facts": [
-        "не начато"
+        "not started"
       ],
       "percent": 0
     },
     {
       "id": "net",
-      "name": "Мультиплеер и транспорт",
+      "name": "Multiplayer and networking",
       "weight": 5,
       "measured": false,
       "score": 0,
-      "how": "оценка автора",
+      "how": "author estimate",
       "facts": [
-        "не начато"
+        "not started"
       ],
       "percent": 0
     }
@@ -127,6 +127,6 @@
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
     "goldenLogLines": 23,
-    "testsPassed": 17
+    "testsPassed": 19
   }
 }

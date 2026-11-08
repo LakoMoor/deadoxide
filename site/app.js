@@ -7,7 +7,7 @@ const el = (tag, attrs = {}, ...kids) => {
   for (const c of kids) n.append(c);
   return n;
 };
-const fmt = (n) => Number(n).toLocaleString("ru-RU");
+const fmt = (n) => Number(n).toLocaleString("en-US");
 
 async function progress() {
   const p = await (await fetch("progress.json", { cache: "no-store" })).json();
@@ -16,16 +16,16 @@ async function progress() {
   fg.setAttribute("stroke-dasharray", C.toFixed(1));
   fg.setAttribute("stroke-dashoffset", C.toFixed(1));
   requestAnimationFrame(() => requestAnimationFrame(() => fg.setAttribute("stroke-dashoffset", (C * (1 - p.overall / 100)).toFixed(1))));
-  $("#overall").textContent = p.overall.toFixed(1).replace(".", ",");
-  $("#updated").textContent = `Обновлено ${p.generated} · ${p.game}`;
+  $("#overall").textContent = p.overall.toFixed(1);
+  $("#updated").textContent = `Updated ${p.generated} · ${p.game}`;
   const list = $("#areas");
   for (const a of p.areas) {
     const bar = el("div", { class: "bar" }, el("i"));
     const d = el("details", { class: "area" });
     d.append(
       el("summary", {},
-        el("div", { class: "t" }, a.name, el("span", { class: `tag ${a.measured ? "m" : "e"}` }, a.measured ? "измерено" : "оценка автора"), el("span", { class: "tag" }, `вес ${a.weight}`)),
-        el("div", { class: "p" }, a.percent.toFixed(a.percent % 1 ? 1 : 0).replace(".", ",") + "%"),
+        el("div", { class: "t" }, a.name, el("span", { class: `tag ${a.measured ? "m" : "e"}` }, a.measured ? "measured" : "author estimate"), el("span", { class: "tag" }, `weight ${a.weight}`)),
+        el("div", { class: "p" }, a.percent.toFixed(a.percent % 1 ? 1 : 0) + "%"),
         bar),
       el("div", { class: "more" }, el("div", {}, a.how), el("ul", {}, ...a.facts.map((f) => el("li", {}, f)))));
     list.append(d);
@@ -33,22 +33,22 @@ async function progress() {
   }
   const n = p.numbers;
   const stats = [
-    [`${fmt(n.luaOk)} / ${fmt(n.luaAll)}`, "Lua-файлов игры выполняются без ошибки"],
-    [`${n.logKindsMatched} / ${n.goldenLogLines}`, "видов строк лога реального клиента воспроизведено"],
-    [fmt(n.zones), "зон карты Muldraugh сверено с настоящим Lua"],
-    [`${n.frameDiff1} → ${n.frameDiffBeforeMask}`, "разница кадра с игрой из 255 (сейчас ← без маски)"],
-    [fmt(n.tilesUsed - n.tilesMissing) + " / " + fmt(n.tilesUsed), "имён тайлов находятся в пакетах текстур"],
-    [fmt(n.testsPassed), "автотестов проходит"],
+    [`${fmt(n.luaOk)} / ${fmt(n.luaAll)}`, "of the game's Lua files run without error"],
+    [`${n.logKindsMatched} / ${n.goldenLogLines}`, "real-client log line kinds reproduced"],
+    [fmt(n.zones), "Muldraugh map zones checked against the real Lua"],
+    [`${n.frameDiff1} → ${n.frameDiffBeforeMask}`, "mean frame difference from the game out of 255: now → before the visibility mask"],
+    [fmt(n.tilesUsed - n.tilesMissing) + " / " + fmt(n.tilesUsed), "tile names found in texture packs"],
+    [fmt(n.testsPassed), "automated tests pass"],
   ];
   $("#stats").append(...stats.map(([b, s]) => el("div", { class: "stat" }, el("b", {}, b), el("span", {}, s))));
 }
 
 function slider(c) {
   const box = el("div", { class: "slider" });
-  const base = el("img", { src: c.port, alt: "порт", loading: "lazy" });
-  const top = el("img", { src: c.game, alt: "оригинал", class: "top", loading: "lazy" });
+  const base = el("img", { src: c.port, alt: "port", loading: "lazy" });
+  const top = el("img", { src: c.game, alt: "original", class: "top", loading: "lazy" });
   const h = el("div", { class: "handle" });
-  box.append(base, top, h, el("span", { class: "lab l" }, "оригинал"), el("span", { class: "lab r" }, "порт"));
+  box.append(base, top, h, el("span", { class: "lab l" }, "original"), el("span", { class: "lab r" }, "port"));
   let down = false;
   const set = (x) => {
     const r = box.getBoundingClientRect();
@@ -68,7 +68,7 @@ async function gallery() {
   const host = $("#compare-list");
   for (const c of g.compare) {
     host.append(el("div", { class: "cmp" },
-      el("h3", {}, c.title, el("span", { class: "d" }, `разница с игрой: ${String(c.diff).replace(".", ",")} из 255 (меньше — лучше)`)),
+      el("h3", {}, c.title, el("span", { class: "d" }, `difference from the game: ${c.diff} of 255 (lower is better)`)),
       slider(c), el("p", {}, c.caption)));
   }
   const po = $("#portonly");
@@ -82,9 +82,9 @@ async function mods() {
     if (!r.mods.length) throw new Error("empty");
     for (const m of r.mods) host.append(el("div", { class: "mod" },
       el("div", {}, el("b", {}, m.name), " ", el("span", { class: "meta" }, `v${m.version} · ${m.author}`)),
-      el("a", { class: "btn", href: m.url }, "Скачать .zip"),
+      el("a", { class: "btn", href: m.url }, "Download .zip"),
       el("p", {}, m.description)));
-  } catch { host.append(el("p", {}, "Каталог модов пока недоступен.")); }
+  } catch { host.append(el("p", {}, "The mod catalog is unavailable right now.")); }
 }
 
 progress(); gallery(); mods();

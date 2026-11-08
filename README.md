@@ -2,31 +2,31 @@
 
 # DeadOxide
 
-Неофициальный совместимый рантайм **Project Zomboid** на Rust (по образцу [Horizon](https://github.com/horizon-rust/horizon) для Minecraft).
-Читает файлы вашей **собственной** копии игры (Steam build 25485521, версия 42.21.0). Файлов игры в репозитории нет.
+An unofficial compatible runtime for **Project Zomboid** in Rust, modelled on [Horizon](https://github.com/horizon-rust/horizon) for Minecraft.
+It reads the files of your **own** copy of the game (Steam build 25485521, version 42.21.0). No game files are in this repository.
 
-**Сайт с прогрессом и сравнением с оригиналом:** https://lakomoor.github.io/deadoxide/
+**Progress, comparison with the original and mod catalog:** https://lakomoor.github.io/deadoxide/
 
-Сейчас перенесено примерно 20 % (взвешенная оценка, часть областей — оценка автора; способ подсчёта на сайте и в `tools/gen_progress.mjs`).
-Играть пока нельзя: нет зомби, инвентаря, звука и сети. Есть чтение форматов, запуск Lua игры и картинка мира.
+Roughly 20% is ported (a weighted estimate; some areas are author estimates, and the site and `tools/gen_progress.mjs` show how each number is computed).
+It is not playable yet: no zombies, inventory, sound or networking. What exists: readers for the game's formats, running the game's Lua, and a picture of the world.
 
-## Запуск
+## Run
 
 ```sh
-git clone https://github.com/LakoMoor/deadoxide    # положите папку внутрь папки ProjectZomboid
+git clone https://github.com/LakoMoor/deadoxide    # place the folder inside your ProjectZomboid folder
 cargo build --release
-cargo run --release -p deadoxide-launcher           # лаунчер: играть, моды, прогресс (GPUI)
+cargo run --release -p deadoxide-launcher           # launcher: play, mods, progress (GPUI)
 ```
 
-Клиент без лаунчера: `play.cmd`. Проверки: `sh tools/check.sh`.
+Client without the launcher: `play.cmd`. Checks: `sh tools/check.sh`.
 
-## Моды
+## Mods
 
-Каталог — `registry/index.json` (url, sha256). Лаунчер скачивает архив, сверяет sha256, распаковывает в `profile/mods`.
-Добавить мод: пул-реквест с записью в каталоге; архив должен быть вашим или опубликован с разрешения автора.
+The catalog is `registry/index.json` (url, sha256). The launcher downloads the archive, verifies the sha256 and extracts it into `profile/mods`.
+To add a mod, open a pull request with a catalog entry; the archive must be yours or published with the author's permission.
 
-## Устройство
+## Layout
 
-См. [CLAUDE.md](CLAUDE.md), [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md), [docs/PORT.md](docs/PORT.md).
+See [CLAUDE.md](CLAUDE.md), [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) and [docs/PORT.md](docs/PORT.md).
 
-Проект не связан с The Indie Stone. Скриншоты оригинальной игры в `screenshots/` и на сайте приложены как свидетельство сравнения; по просьбе правообладателя будут убраны.
+Not affiliated with The Indie Stone. Screenshots of the original game in `screenshots/` and on the site are included as evidence for the comparison; they will be removed at the rights holder's request.

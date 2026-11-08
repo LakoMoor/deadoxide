@@ -2,30 +2,30 @@
   "compare": [
     {
       "id": "livingroom",
-      "title": "Гостиная на спавне",
+      "title": "Living room at spawn",
       "game": "assets/gallery/game_clean2.png",
       "port": "assets/gallery/port_lit_room.png",
       "diff": 16.27,
-      "caption": "Ночь, игра на паузе. Слева настоящая игра, справа порт: геометрия, камера, мебель и стены совпадают. Не хватает освещения: светового пятна у двери и затемнения."
+      "caption": "Night, game paused. The real game on the left, the port on the right: geometry, camera, furniture and walls match. Lighting is missing: the light patch by the door and the darkening."
     },
     {
       "id": "moved",
-      "title": "Персонаж сдвинулся (контрольный кадр)",
+      "title": "Character moved (held-out frame)",
       "game": "assets/gallery/game_s3_moved_S.png",
       "port": "assets/gallery/port_s3.png",
       "diff": 27.09,
-      "caption": "Второй эталон: персонаж прошёл несколько клеток, позиция взята из сохранения. Камера и правило выреза стен проверены на этом кадре без подгонки. Остаток разницы почти целиком свет."
+      "caption": "A second oracle: the character walked a few tiles, position read from the save. The camera and the wall cutaway rule were checked on this frame without tuning. Most of the remaining difference is lighting."
     },
     {
       "id": "nomask",
-      "title": "Раньше: без маски видимости",
+      "title": "Before: without the visibility mask",
       "game": "assets/gallery/game_clean2.png",
       "port": "assets/gallery/port_z0_aligned.png",
       "diff": 79.68,
-      "caption": "Тот же кадр до маски видимости: порт рисовал весь дом и двор, а игра показывает только комнату игрока. Разница с игрой была 79,7 из 255, стала 16,3."
+      "caption": "The same frame before the visibility mask: the port drew the whole house and yard, while the game shows only the player's room. Difference from the game was 79.7 of 255, now 16.3."
     }
   ],
   "portOnly": [
-    { "src": "assets/gallery/port_gpu_cell41_39.png", "title": "Ячейка 41_39, отрисовка на видеокарте", "caption": "Muldraugh: тайлы, этажи и порядок отрисовки читаются прямо из файлов игры." }
+    { "src": "assets/gallery/port_gpu_cell41_39.png", "title": "Cell 41_39, GPU rendering", "caption": "Muldraugh: tiles, floors and draw order read straight from the game's files." }
   ]
 }

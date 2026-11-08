@@ -1,17 +1,14 @@
+#![recursion_limit = "1024"]
 //! DeadOxide launcher on GPUI Fast (the same UI stack as Horizon's launcher). Tabs: Play / Mods / Progress / About.
 //! Play starts the Rust client (read-only over the player's own install) or the original game with an isolated `-cachedir`.
 //! Mods come from a registry (`registry.json`): download -> verify sha256 -> extract into `<profile>/mods`.
-#![recursion_limit = "512"]
 use gpui::{prelude::*, *};
-use serde::Deserialize;
-use sha2::{Digest, Sha256};
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::mpsc;
 use std::time::Duration;
 
-const SITE: &str = "https://lakomoor.github.io/deadoxide/";
+use deadoxide_launcher::*;
 const BG: u32 = 0x0e0b0a;
 const CARD: u32 = 0x1d1713;
 const LINE: u32 = 0x34281f;
@@ -21,152 +18,10 @@ const RUST: u32 = 0xe8692a;
 const RUST2: u32 = 0xff9a55;
 const BAD: u32 = 0xe07070;
 
-#[derive(Deserialize, Clone, Debug)]
-struct Mod {
-    id: String,
-    name: String,
-    version: String,
-    author: String,
-    description: String,
-    url: String,
-    sha256: String,
-}
-#[derive(Deserialize)]
-struct Registry {
-    mods: Vec<Mod>,
-}
-#[derive(Deserialize, Clone)]
-struct Area {
-    name: String,
-    percent: f32,
-    measured: bool,
-}
-#[derive(Deserialize, Clone)]
-struct Progress {
-    overall: f32,
-    generated: String,
-    areas: Vec<Area>,
-}
-
 enum Msg {
     Registry(Result<Vec<Mod>, String>),
     Progress(Result<Progress, String>),
     Installed(String, Result<PathBuf, String>),
-}
-
-fn get_bytes(url: &str) -> Result<Vec<u8>, String> {
-    if let Some(p) = url.strip_prefix("file:") {
-        let mut v = std::fs::read(p).map_err(|e| e.to_string())?;
-        if v.starts_with(&[0xEF, 0xBB, 0xBF]) {
-            v.drain(..3);
-        }
-        return Ok(v);
-    }
-    let mut r = ureq::get(url).call().map_err(|e| format!("{url}: {e}"))?;
-    let mut v = Vec::new();
-    r.body_mut()
-        .as_reader()
-        .take(64 << 20)
-        .read_to_end(&mut v)
-        .map_err(|e| e.to_string())?;
-    if v.starts_with(&[0xEF, 0xBB, 0xBF]) {
-        v.drain(..3);
-    }
-    Ok(v)
-}
-
-/// Verify sha256, then extract. Entries that would escape `dest` (zip-slip) are rejected.
-fn install(m: &Mod, base: &str, mods_dir: &Path) -> Result<PathBuf, String> {
-    let url = if m.url.contains("://") || m.url.starts_with("file:") {
-        m.url.clone()
-    } else {
-        format!("{base}{}", m.url)
-    };
-    let data = get_bytes(&url)?;
-    let got: String = Sha256::digest(&data)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    if !got.eq_ignore_ascii_case(&m.sha256) {
-        return Err(format!(
-            "sha256 не совпал: ожидали {}, получили {got}",
-            m.sha256
-        ));
-    }
-    let dest = mods_dir.join(&m.id);
-    let mut z = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|e| e.to_string())?;
-    for i in 0..z.len() {
-        let mut f = z.by_index(i).map_err(|e| e.to_string())?;
-        let rel = f
-            .enclosed_name()
-            .ok_or_else(|| format!("небезопасный путь в архиве: {}", f.name()))?;
-        let out = dest.join(rel);
-        if f.is_dir() {
-            std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
-        } else {
-            if let Some(p) = out.parent() {
-                std::fs::create_dir_all(p).map_err(|e| e.to_string())?;
-            }
-            let mut w = std::fs::File::create(&out).map_err(|e| e.to_string())?;
-            std::io::copy(&mut f, &mut w).map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(dest)
-}
-
-fn find_game() -> Option<PathBuf> {
-    let mut c: Vec<PathBuf> = vec![];
-    if let Ok(p) = std::env::var("PZ_ROOT") {
-        c.push(p.into());
-    }
-    let mut d = std::env::current_dir().ok();
-    while let Some(p) = d {
-        c.push(p.clone());
-        d = p.parent().map(Path::to_path_buf);
-    }
-    for pf in [
-        "C:/Program Files (x86)/Steam",
-        "C:/Program Files/Steam",
-        "D:/Steam",
-        "D:/SteamLibrary",
-        "E:/Games",
-        "E:/SteamLibrary",
-    ] {
-        c.push(Path::new(pf).join("steamapps/common/ProjectZomboid"));
-    }
-    c.into_iter()
-        .find(|p| p.join("projectzomboid.jar").exists())
-}
-
-fn find_client() -> Option<PathBuf> {
-    let name = if cfg!(windows) {
-        "zomboid-client.exe"
-    } else {
-        "zomboid-client"
-    };
-    let mut c = vec![];
-    if let Ok(e) = std::env::current_exe() {
-        if let Some(d) = e.parent() {
-            c.push(d.join(name));
-        }
-    }
-    c.push(PathBuf::from("target/release").join(name));
-    c.push(PathBuf::from("zomboid-rs/target/release").join(name));
-    c.into_iter().find(|p| p.exists())
-}
-
-fn find_players_db(dir: &Path) -> Option<PathBuf> {
-    for e in std::fs::read_dir(dir).ok()?.flatten() {
-        let p = e.path();
-        if p.is_dir() {
-            if let Some(f) = find_players_db(&p) {
-                return Some(f);
-            }
-        } else if p.file_name().is_some_and(|n| n == "players.db") {
-            return Some(p);
-        }
-    }
-    None
 }
 
 struct Launcher {
@@ -255,8 +110,8 @@ impl Launcher {
                 Msg::Installed(id, r) => {
                     self.busy.retain(|b| *b != id);
                     self.status = match r {
-                        Ok(p) => format!("Мод {id} установлен: {}", p.display()),
-                        Err(e) => format!("Мод {id}: ошибка: {e}"),
+                        Ok(p) => format!("Mod {id} installed: {}", p.display()),
+                        Err(e) => format!("Mod {id}: error: {e}"),
                     };
                 }
             }
@@ -286,9 +141,9 @@ impl Launcher {
         self.status = match cmd.spawn() {
             Ok(ch) => {
                 self.child = Some(ch);
-                "Клиент порта запущен".into()
+                "Port client started".into()
             }
-            Err(e) => format!("Не удалось запустить клиент: {e}"),
+            Err(e) => format!("Could not start the client: {e}"),
         };
     }
     fn play_original(&mut self) {
@@ -312,9 +167,9 @@ impl Launcher {
         self.status = match r {
             Ok(ch) => {
                 self.child = Some(ch);
-                "Оригинальная игра запущена с отдельным профилем".into()
+                "Original game started with a separate profile".into()
             }
-            Err(e) => format!("Не удалось запустить игру: {e}"),
+            Err(e) => format!("Could not start the game: {e}"),
         };
     }
     fn stop(&mut self) {
@@ -372,7 +227,7 @@ fn bar(pct: f32) -> impl IntoElement {
 
 impl Render for Launcher {
     fn render(&mut self, _w: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let tabs = ["Играть", "Моды", "Прогресс", "О проекте"]
+        let tabs = ["Play", "Mods", "Progress", "About"]
             .iter()
             .enumerate()
             .map(|(i, n)| {
@@ -399,33 +254,33 @@ impl Render for Launcher {
                 let mut col = div().flex().flex_col().gap_3();
                 col = col.child(match &self.game {
                     Some(g) => div().child(format!("Project Zomboid: {}", g.display())),
-                    None => div().text_color(rgb(BAD)).child("Установка не найдена. Задайте переменную PZ_ROOT."),
+                    None => div().text_color(rgb(BAD)).child("Project Zomboid install not found. Set the PZ_ROOT environment variable."),
                 });
-                col = col.child(div().text_color(rgb(MUTED)).child(format!("Профиль (отдельный от ваших сохранений): {}", self.profile.display())));
-                let mut row = div().flex().gap_3().child(button("play-port", "Запустить клиент порта", true, can_port).on_click(cx.listener(|t, _, _, cx| {
+                col = col.child(div().text_color(rgb(MUTED)).child(format!("Profile (separate from your own saves): {}", self.profile.display())));
+                let mut row = div().flex().gap_3().child(button("play-port", "Play the port client", true, can_port).on_click(cx.listener(|t, _, _, cx| {
                     if t.game.is_some() && t.client.is_some() && t.child.is_none() {
                         t.play_port();
                         cx.notify();
                     }
                 })));
-                row = row.child(button("play-orig", "Запустить оригинал (отдельный профиль)", false, can_orig).on_click(cx.listener(|t, _, _, cx| {
+                row = row.child(button("play-orig", "Play the original (separate profile)", false, can_orig).on_click(cx.listener(|t, _, _, cx| {
                     if t.game.is_some() && t.child.is_none() {
                         t.play_original();
                         cx.notify();
                     }
                 })));
                 if running {
-                    row = row.child(button("stop", "Остановить", false, true).on_click(cx.listener(|t, _, _, cx| {
+                    row = row.child(button("stop", "Stop", false, true).on_click(cx.listener(|t, _, _, cx| {
                         t.stop();
-                        t.status = "Остановлено".into();
+                        t.status = "Stopped".into();
                         cx.notify();
                     })));
                 }
                 col = col.child(row);
                 if self.client.is_none() {
-                    col = col.child(div().text_color(rgb(MUTED)).child("Клиент порта не найден. Соберите: cargo build --release -p zomboid-client"));
+                    col = col.child(div().text_color(rgb(MUTED)).child("Port client not found. Build it: cargo build --release -p zomboid-client"));
                 }
-                col.child(div().text_color(rgb(MUTED)).child("Клиент порта пока показывает мир, играть в него нельзя: зомби, инвентарь и звук не сделаны.")).into_any_element()
+                col.child(div().text_color(rgb(MUTED)).child("The port client only shows the world for now; it is not playable: zombies, inventory and sound are not done.")).into_any_element()
             }
             1 => {
                 let mut col = div().flex().flex_col().gap_3();
@@ -434,20 +289,20 @@ impl Render for Launcher {
                         .flex()
                         .justify_between()
                         .items_center()
-                        .child(div().text_color(rgb(MUTED)).child(format!("Папка модов: {}", self.mods_dir().display())))
-                        .child(button("refresh", "Обновить", false, true).on_click(cx.listener(|t, _, _, cx| {
+                        .child(div().text_color(rgb(MUTED)).child(format!("Mods folder: {}", self.mods_dir().display())))
+                        .child(button("refresh", "Refresh", false, true).on_click(cx.listener(|t, _, _, cx| {
                             t.mods_err = None;
                             t.fetch();
                             cx.notify();
                         }))),
                 );
                 if let Some(e) = &self.mods_err {
-                    col = col.child(div().text_color(rgb(BAD)).child(format!("Каталог недоступен: {e}")));
+                    col = col.child(div().text_color(rgb(BAD)).child(format!("Catalog unavailable: {e}")));
                 }
                 for (i, m) in self.mods.iter().enumerate() {
                     let busy = self.busy.contains(&m.id);
                     let done = self.mods_dir().join(&m.id).exists();
-                    let label = if busy { "Загрузка…" } else if done { "Переустановить" } else { "Установить" };
+                    let label = if busy { "Downloading…" } else if done { "Reinstall" } else { "Install" };
                     let mm = m.clone();
                     col = col.child(
                         div()
@@ -487,18 +342,18 @@ impl Render for Launcher {
                 let mut col = div().flex().flex_col().gap_2();
                 if let Some(p) = &self.progress {
                     col = col
-                        .child(div().text_2xl().font_weight(FontWeight::BOLD).text_color(rgb(RUST2)).child(format!("Перенесено: {:.1}%", p.overall)))
+                        .child(div().text_2xl().font_weight(FontWeight::BOLD).text_color(rgb(RUST2)).child(format!("Ported: {:.1}%", p.overall)))
                         .child(bar(p.overall))
-                        .child(div().text_color(rgb(MUTED)).child(format!("данные от {}", p.generated)));
+                        .child(div().text_color(rgb(MUTED)).child(format!("data from {}", p.generated)));
                     for a in &p.areas {
                         col = col
-                            .child(div().mt_2().flex().justify_between().child(format!("{} ({})", a.name, if a.measured { "измерено" } else { "оценка автора" })).child(format!("{:.1}%", a.percent)))
+                            .child(div().mt_2().flex().justify_between().child(format!("{} ({})", a.name, if a.measured { "measured" } else { "author estimate" })).child(format!("{:.1}%", a.percent)))
                             .child(bar(a.percent));
                     }
                 } else if let Some(e) = &self.prog_err {
-                    col = col.child(div().text_color(rgb(BAD)).child(format!("Не удалось загрузить прогресс: {e}")));
+                    col = col.child(div().text_color(rgb(BAD)).child(format!("Could not load progress: {e}")));
                 } else {
-                    col = col.child("Загрузка…");
+                    col = col.child("Loading…");
                 }
                 col.into_any_element()
             }
@@ -507,10 +362,10 @@ impl Render for Launcher {
                 .flex_col()
                 .gap_2()
                 .child(div().text_2xl().font_weight(FontWeight::BOLD).child("DeadOxide"))
-                .child("Неофициальный совместимый рантайм Project Zomboid на Rust. Нужна ваша собственная копия игры; файлы игры не распространяются.")
+                .child("Unofficial compatible runtime for Project Zomboid in Rust. You need your own copy of the game; no game files are distributed.")
                 .child(div().text_color(rgb(RUST2)).child(SITE))
                 .child(div().text_color(rgb(RUST2)).child("https://github.com/LakoMoor/deadoxide"))
-                .child(div().text_color(rgb(MUTED)).child("Моды ставятся только с проверкой sha256 из каталога."))
+                .child(div().text_color(rgb(MUTED)).child("Mods are installed only after a sha256 check against the catalog."))
                 .into_any_element(),
         };
         div()
@@ -546,7 +401,7 @@ impl Render for Launcher {
                     .border_color(rgb(LINE))
                     .text_color(rgb(MUTED))
                     .child(if self.status.is_empty() {
-                        "Готово".to_string()
+                        "Ready".to_string()
                     } else {
                         self.status.clone()
                     }),
@@ -571,42 +426,4 @@ fn main() {
         .expect("open window");
         cx.activate(true);
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn site() -> String {
-        format!(
-            "file:{}/../site/",
-            env!("CARGO_MANIFEST_DIR").replace(std::path::MAIN_SEPARATOR, "/")
-        )
-    }
-    fn catalog_mod() -> Mod {
-        let b = get_bytes(&format!("{}registry.json", site())).unwrap();
-        serde_json::from_slice::<Registry>(&b)
-            .unwrap()
-            .mods
-            .remove(0)
-    }
-
-    #[test]
-    fn installs_the_catalog_mod_into_a_fresh_dir() {
-        let dir = std::env::temp_dir().join(format!("deadoxide-test-{}", std::process::id()));
-        let out = install(&catalog_mod(), &site(), &dir).unwrap();
-        let lua = std::fs::read_to_string(out.join("media/lua/client/HelloDeadOxide.lua")).unwrap();
-        assert!(lua.contains("mod loaded"));
-        assert!(out.join("mod.info").exists());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn wrong_sha256_installs_nothing() {
-        let dir = std::env::temp_dir().join(format!("deadoxide-test-bad-{}", std::process::id()));
-        let mut m = catalog_mod();
-        m.sha256 = "0".repeat(64);
-        assert!(install(&m, &site(), &dir).unwrap_err().contains("sha256"));
-        assert!(!dir.exists());
-    }
 }
