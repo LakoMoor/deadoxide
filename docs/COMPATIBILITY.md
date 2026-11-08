@@ -231,3 +231,11 @@ Plain-text per-variant animation name and `m_SpeedScale` (blank = not set in the
 
 `media/sound/banks/Desktop/`: ZomboidSound.bank (647 MB), ZomboidMusic.bank (667 MB), ZomboidSoundMP.bank (40 MB), radio.bank (9 MB), ZomboidSound.strings.bank (171 KB).
 The strings bank is a RIFF container, form type `FEV `, with two chunks: `FMT ` (8 bytes) and one `LIST` (171192 bytes) that holds typed sub-lists (`PROJBNKI`, `IBSSLIST`, `GBSSLIST`, `EVTSLIST`, `VCASLIST`, `PRMSLIST`, ...). Path-like names such as `/Zombie`, `/ZombieClaw`, `/Reverb`, `/Locks` are present. A naive search for `event:/` finds nothing, so the event names are stored per sub-list, not as one string. No event table or audio stream is decoded; the audio area stays 0%.
+
+## Third oracle frame (new game run, 1710x1074 client area, night, paused) — a failure, recorded
+
+Run: real game 42.21.0 in `profile/`, Continue, closed the guide/info/inventory/loot windows (click points at this window size: Continue (260,516), start (855,500), guide Close (1422,851), info X (308,108), inventory X (293,8), loot X (863,8)). Frame: `screenshots/game_run2_clean.png`. The character stands near the south door of the spawn room; a tree and a lit road are visible outside.
+Port frame with the same saved position, camera centre iso(8305.8252, 11691.6582) - (0, 56), zoom 1.0, 1710x1074, `--lit-room`: `screenshots/port_run2.png`. Whole-frame mean|luma diff| = 27.69 of 255.
+What matches: the room geometry, posters, windows, furniture and the character marker land on the same pixels as in the game (camera model holds at a third frame size).
+What does NOT match, measured by eye on the two frames: (1) the port draws the opaque south-west wall with the door and a full floor row there, the game shows that side cut away/black (the `retain_room` rule was fitted on frames 1 and 2 and does not carry over to this position); (2) the port has no outside squares, so the tree, grass and the lit road (visible in the game through the door) are missing; (3) lighting falloff as before.
+Consequence: the visibility rule is NOT validated beyond two positions. UNKNOWN: whether the real rule depends on the player's distance to the wall, line of sight, or the room's facing. Next measurement: capture two more positions in the same room to separate those hypotheses.
