@@ -139,6 +139,17 @@ function ItemList:contains(item)
   for i = 1, #self do if self[i] == item then return true end end
   return false
 end
+-- Item.getLearnedRecipes returns a Java list, or nil when the property is absent.
+function ItemMT.getLearnedRecipes(s)
+  local value = s.props.LearnedRecipes
+  if not value then return nil end
+  if not s.learnedRecipes then
+    local recipes = {}
+    for recipe in string.gmatch(value, "[^;]+") do recipes[#recipes + 1] = recipe end
+    s.learnedRecipes = setmetatable(recipes, { __index = ItemList })
+  end
+  return s.learnedRecipes
+end
 function SM:getAllItems()
   local t = {}; for i, f in ipairs(__ScriptItemOrder) do t[i] = __ScriptItems[f] end
   return setmetatable(t, { __index = ItemList })
@@ -174,6 +185,53 @@ mod tests {
     use super::install;
     use mlua::Lua;
     use std::path::Path;
+
+    #[test]
+    fn real_learned_recipes_match_original_samples() -> mlua::Result<()> {
+        let lua = Lua::new();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        install(&lua, &root)?;
+        let inspect: mlua::Function = lua
+            .load(
+                r#"
+            return function(name)
+                local recipes = getScriptManager():getItem(name):getLearnedRecipes()
+                if recipes == nil then return nil end
+                local result = {}
+                -- This is the loop used by ISLiteratureUI:setLists.
+                for j = 1, recipes:size() do result[j] = recipes:get(j - 1) end
+                assert(not pcall(function() recipes:get(-1) end))
+                assert(not pcall(function() recipes:get(recipes:size()) end))
+                return table.concat(result, "|")
+            end
+        "#,
+            )
+            .eval()?;
+        let mut checked = 0;
+        for line in include_str!("../../../tests/golden/item_recipes_partial.txt")
+            .lines()
+            .skip(1)
+        {
+            let (key, expected) = line
+                .strip_prefix("PROBE ")
+                .expect("oracle prefix")
+                .split_once('=')
+                .expect("oracle entry");
+            let actual: Option<String> = inspect.call(key)?;
+            assert_eq!(
+                actual.as_deref(),
+                if expected == "null" {
+                    None
+                } else {
+                    Some(expected)
+                },
+                "{key}"
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 4);
+        Ok(())
+    }
 
     #[test]
     fn real_item_properties_match_original_samples() -> mlua::Result<()> {

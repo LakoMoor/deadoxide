@@ -59,7 +59,7 @@ const areas = [
   { id: "lua", name: "The game's Lua scripts run", weight: 20, measured: false,
     score: pct(luaOk, luaAll) / 100 * 0.2,
     how: "Lua files that execute without error, counted as 20% of the area weight (running is not the same as correct); the rest is the real Java API, which barely exists yet (author estimate: ~0)",
-    facts: [`Lua files without error under stubs: ${luaOk} of ${luaAll}`, `undefined Java names the Lua touches: ${globals}`, `selected real-client log lines reproduced: ${parityKinds} of ${golden}`, "numeric literals, translation formatting, RU fallback, item-name lookup, item-list API and selected item properties checked against selected original Java cases"] },
+    facts: [`Lua files without error under stubs: ${luaOk} of ${luaAll}`, `undefined Java names the Lua touches: ${globals}`, `selected real-client log lines reproduced: ${parityKinds} of ${golden}`, "numeric literals, translation formatting, RU fallback, item-name lookup, item-list API, selected item properties and learned-recipe lists checked against selected original Java cases"] },
   { id: "render", name: "World rendering", weight: 20, measured: false,
     score: Math.max(0, 1 - d1 / 60) * 0.5,
     how: "frame similarity to the game, 1 - (diff/60), times 0.5: lighting, characters, weather and animation are not there yet",
