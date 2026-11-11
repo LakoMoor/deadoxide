@@ -29,9 +29,9 @@
       "how": "Lua files that execute without error, counted as 20% of the area weight (running is not the same as correct); the rest is the real Java API, which barely exists yet (author estimate: ~0)",
       "facts": [
         "Lua files without error under stubs: 1393 of 1395",
-        "undefined Java names the Lua touches: 121",
+        "undefined Java names the Lua touches: 122",
         "selected real-client log lines reproduced: 22 of 22",
-        "numeric literals, translation formatting, RU fallback, item-name lookup, item-list API, selected item properties and learned-recipe lists checked against selected original Java cases"
+        "numeric literals, translation formatting, RU fallback, item-name lookup, item-list API, selected item properties, learned-recipe lists and recipe-name translation checked against selected original Java cases"
       ],
       "percent": 20
     },
@@ -119,7 +119,7 @@
   "numbers": {
     "luaOk": 1393,
     "luaAll": 1395,
-    "globals": 121,
+    "globals": 122,
     "tilesUsed": 26063,
     "tilesMissing": 82,
     "headerParsed": 120687,
@@ -130,6 +130,6 @@
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
     "goldenLogLines": 22,
-    "testsPassed": 44
+    "testsPassed": 45
   }
 }

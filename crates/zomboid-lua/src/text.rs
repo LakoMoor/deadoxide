@@ -150,6 +150,7 @@ pub fn install(lua: &Lua, root: &Path, lang: &str) -> Result<usize> {
     }
     let mut map: HashMap<String, String> = HashMap::new();
     let mut item_names: HashMap<String, String> = HashMap::new();
+    let mut recipe_names: HashMap<String, String> = HashMap::new();
     // The original's measured Russian stack is EN then RU; later entries override.
     let languages = if lang == "EN" {
         vec!["EN"]
@@ -173,10 +174,10 @@ pub fn install(lua: &Lua, root: &Path, lang: &str) -> Result<usize> {
                 if filename.ends_with(", KY.json") || filename == "EvolvedRecipeName.json" {
                     continue;
                 }
-                let destination = if filename == "ItemName.json" {
-                    &mut item_names
-                } else {
-                    &mut map
+                let destination = match filename {
+                    "ItemName.json" => &mut item_names,
+                    "Recipes.json" => &mut recipe_names,
+                    _ => &mut map,
                 };
                 let Ok(s) = std::fs::read_to_string(&f) else {
                     continue;
@@ -193,6 +194,12 @@ pub fn install(lua: &Lua, root: &Path, lang: &str) -> Result<usize> {
             }
         }
     }
+    lua.globals().set(
+        "__getRecipeName",
+        lua.create_function(move |_, key: String| {
+            Ok(recipe_names.get(&key).cloned().unwrap_or(key))
+        })?,
+    )?;
     lua.globals().set(
         "getItemNameFromFullType",
         lua.create_function(move |_, key: String| {
@@ -241,6 +248,46 @@ pub fn install(lua: &Lua, root: &Path, lang: &str) -> Result<usize> {
 mod tests {
     use super::{install, substitute};
     use mlua::{Lua, Value};
+
+    #[test]
+    fn recipe_names_and_literature_path_match_original() -> mlua::Result<()> {
+        let lua = Lua::new();
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        super::super::scripts::install(&lua, &root)?;
+        install(&lua, &root, "RU")?;
+        lua.load(include_str!("prelude.lua")).exec()?;
+        let translate: mlua::Function = lua
+            .load(
+                r#"
+            return function(key) return Translator.getRecipeName(key), getTextOrNull(key) end
+        "#,
+            )
+            .eval()?;
+        let mut count = 0;
+        let mut lines = include_str!("../../../tests/golden/recipe_names_ru.txt").lines();
+        while let Some(line) = lines.next() {
+            let (key, expected) = line
+                .strip_prefix("PROBE ")
+                .expect("oracle line")
+                .split_once('=')
+                .expect("oracle entry");
+            let text = lines.next().expect("text oracle");
+            assert_eq!(text, format!("TEXT {key}=null"));
+            let (actual, ordinary): (String, Option<String>) = translate.call(key)?;
+            assert_eq!(actual, expected, "{key}");
+            assert_eq!(ordinary, None, "{key}");
+            count += 1;
+        }
+        assert_eq!(count, 7);
+        let values: (String, String) = lua.load(r#"
+            local item = getScriptManager():getItem("Base.SmithingMag1")
+            local recipes = item:getLearnedRecipes()
+            return Translator.getRecipeName(recipes:get(0)), Translator.getRecipeName(recipes:get(1))
+        "#).eval()?;
+        assert_eq!(values.0, "Выковать кузнечные клещи");
+        assert_eq!(values.1, "Выковать гвоздильню");
+        Ok(())
+    }
 
     #[test]
     fn item_and_text_namespaces_match_original() -> mlua::Result<()> {

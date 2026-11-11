@@ -1,0 +1,14 @@
+PROBE Forge_Tongs=Выковать кузнечные клещи
+TEXT Forge_Tongs=null
+PROBE Forge_Heading_Tool=Выковать гвоздильню
+TEXT Forge_Heading_Tool=null
+PROBE base:kitchentools=base:kitchentools
+TEXT base:kitchentools=null
+PROBE AddACigarette=Убрать сигарету в пачку
+TEXT AddACigarette=null
+PROBE Missing_Recipe=Missing_Recipe
+TEXT Missing_Recipe=null
+PROBE forge_tongs=forge_tongs
+TEXT forge_tongs=null
+PROBE AdvancedMakeshiftElectricBlowerForge=Advanced Makeshift Electric Blower Forge
+TEXT AdvancedMakeshiftElectricBlowerForge=null

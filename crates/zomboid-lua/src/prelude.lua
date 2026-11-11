@@ -19,6 +19,10 @@ setmetatable(_G, { __index = function(g, k)
   local v = mk(tostring(k)); rawset(g, k, v); return v
 end })
 
+-- Bind the measured translator method onto the existing permissive Java stub;
+-- unimplemented Translator members remain stubs.
+Translator.getRecipeName = __getRecipeName
+
 -- Globals the Java side provides (values observed in Lua usage; not yet diffed against the real client).
 UI_BORDER_SPACING = 10
 BUTTON_HGT = 25

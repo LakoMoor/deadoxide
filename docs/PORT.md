@@ -83,6 +83,9 @@ Model: https://github.com/horizon-rust/horizon (Minecraft Java reimplemented in 
 ## Learned recipe lists — 2026-11-11
 - `javac -encoding UTF-8 -cp ../projectzomboid.jar -d target/original-probe tests/original_probe/ItemRecipesProbe.java`; from the game root run `java -cp 'zomboid-rs/target/original-probe:projectzomboid.jar' ItemRecipesProbe Base.Axe Base.BookCarpentry1 Base.SmithingMag1 Base.SmithingMag2`. Original loading stops at the Windows Bullet native call; two selected captures match `tests/golden/item_recipes_partial.txt`. Rust now supplies nil or a zero-based Java-style list for `getLearnedRecipes`, checked against all entries on those four installed items. Real UI and recipe execution are not implemented by this slice.
 
+## Recipe name translation — 2026-11-11
+- `javac -encoding UTF-8 -cp ../projectzomboid.jar -d target/original-probe tests/original_probe/RecipeNamesProbe.java`; from the game root run `java -cp 'zomboid-rs/target/original-probe:projectzomboid.jar' RecipeNamesProbe RU Forge_Tongs Forge_Heading_Tool base:kitchentools AddACigarette Missing_Recipe forge_tongs AdvancedMakeshiftElectricBlowerForge`. Two runs matched `tests/golden/recipe_names_ru.txt`. The Lua harness now keeps recipe names separate from `getText` and resolves `Translator.getRecipeName`; its real-content test connects the first two IDs from `Base.SmithingMag1` to RU translations. Full UI, remaining Translator methods and mod overrides are not implemented.
+
 ## Slices
 - [x] S0 workspace + `zomboid-ctl check <root>` content inventory (4112 lotheader/lotpack pairs, 2 map sets).
 - [x] S1 lotheader (names,width,height,minLevel,maxLevel) + lotpack chunk decode (roomId + tile ids per 8x8 square, skip runs). Verified structurally on all Muldraugh cells: 4,162,560 chunks, 0 length mismatches. Not yet decoded: rooms/buildings/zombie-intensity tail of lotheader; tile-id→name/texture mapping (S2).
