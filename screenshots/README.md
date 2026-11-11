@@ -11,3 +11,6 @@ All screenshots (real game and port) go here.
 - port_adjacent_2026-11-11.png — same scenario after adjacent-window collision changes; the still does not test movement or window interaction.
 - port_real_water_2026-11-11.png — Rust cell 0_18, x=1 y=4803 z=0, zoom 1, 1920x1050. Edge of the loaded cell, red placeholder player; no original screenshot comparison exists here.
 Command: `zomboid-client .. 32_45 --shot screenshots/<name>.png -216704 639720 1.0 1920 1050 --player 8303.5 11689.5 --level 2`
+
+- `port_save_auto_2026-11-11.png`: port screenshot from the isolated saved player, z=0, experimental room lighting; matches explicit port coordinates byte-for-byte.
+- `port_save_z1_auto_2026-11-11.png`: port screenshot from a scratch copy of that database with synthetic z=1; this is not an original upstairs save or a game comparison.

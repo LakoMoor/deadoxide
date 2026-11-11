@@ -73,8 +73,8 @@
       "score": 0.1,
       "how": "author estimate: the player position is read from players.db; nothing else",
       "facts": [
-        "player position is read from a real save",
-        "time of day from map_t.bin is not decoded"
+        "player position and floor from a real save now drive window and offscreen camera; z=1 additionally checked with a synthetic copy",
+        "save writing, changed world data and time of day are not implemented"
       ],
       "percent": 10
     },

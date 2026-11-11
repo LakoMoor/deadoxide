@@ -35,6 +35,11 @@
   ],
   "portOnly": [
     {
+      "src": "assets/gallery/port_save_auto_2026-11-11.png",
+      "title": "Saved player in Rosewood",
+      "caption": "Port render from the isolated saved position at z=0, zoom 0.5; the red block is a placeholder and room lighting is experimental. This is a wiring check, not an original comparison."
+    },
+    {
       "src": "assets/gallery/port_real_water_2026-11-11.png",
       "title": "Water square in cell 0_18",
       "caption": "Rust client at x=1, y=4803, z=0, zoom 1; the red block is a placeholder. This is the edge of the loaded cell. No original screenshot or movement trace is available for this location."

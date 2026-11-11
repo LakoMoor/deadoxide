@@ -26,6 +26,8 @@ pub struct Scene {
     pub instances: Vec<Instance>,
     /// instance index where each level starts (len = levels + 1)
     pub level_ranges: Vec<u32>,
+    /// World z corresponding to the first entry in level_ranges.
+    pub min_level: i32,
     pub unresolved: u64,
     pub collision: Collision,
     /// per instance: (gx, gy, z, room_id), parallel to `instances` (used by `retain_room`)
@@ -235,6 +237,7 @@ pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Sc
         atlas,
         instances,
         level_ranges,
+        min_level: zmin,
         unresolved,
         collision,
         meta,
@@ -360,10 +363,7 @@ impl Scene {
             }
         }
         // rebuild level starts from the surviving instances' z (instances are already ordered by level)
-        let (zmin, n) = (
-            self.meta.iter().map(|m| m.2).min().unwrap_or(0),
-            self.level_ranges.len() - 1,
-        );
+        let (zmin, n) = (self.min_level, self.level_ranges.len() - 1);
         let starts: Vec<u32> = (0..=n)
             .map(|lv| {
                 meta.iter()

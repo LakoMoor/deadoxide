@@ -86,6 +86,11 @@ Model: https://github.com/horizon-rust/horizon (Minecraft Java reimplemented in 
 ## Recipe name translation — 2026-11-11
 - `javac -encoding UTF-8 -cp ../projectzomboid.jar -d target/original-probe tests/original_probe/RecipeNamesProbe.java`; from the game root run `java -cp 'zomboid-rs/target/original-probe:projectzomboid.jar' RecipeNamesProbe RU Forge_Tongs Forge_Heading_Tool base:kitchentools AddACigarette Missing_Recipe forge_tongs AdvancedMakeshiftElectricBlowerForge`. Two runs matched `tests/golden/recipe_names_ru.txt`. The Lua harness now keeps recipe names separate from `getText` and resolves `Translator.getRecipeName`; its real-content test connects the first two IDs from `Base.SmithingMag1` to RU translations. Full UI, remaining Translator methods and mod overrides are not implemented.
 
+## Saved-player render wiring — 2026-11-11
+- `--save` initializes camera and level for the window and offscreen render, and `--shot` defaults to the saved player including z; `--player-z` supports explicit offscreen checks. The scene retains the actual minimum level when rebuilding filtered ranges.
+- With the isolated real Rosewood save at `(8306.65625,11692.8720703125,0)`, `--save ... --shot screenshots/port_save_auto_2026-11-11.png --lit-room` matched byte-for-byte a shot with explicit coordinates, camera and `--level 2`. A scratch DB copy with z=1 likewise matched an explicit `--player-z 1 --level 3` shot. The two retained images are port output; these comparisons do not prove original visual or save-state parity. GPU use required elevated access on this host.
+- Four core crates passed 45 tests with one ignored; client Clippy, formatting and the 22 selected Lua warnings passed.
+
 ## Slices
 - [x] S0 workspace + `zomboid-ctl check <root>` content inventory (4112 lotheader/lotpack pairs, 2 map sets).
 - [x] S1 lotheader (names,width,height,minLevel,maxLevel) + lotpack chunk decode (roomId + tile ids per 8x8 square, skip runs). Verified structurally on all Muldraugh cells: 4,162,560 chunks, 0 length mismatches. Not yet decoded: rooms/buildings/zombie-intensity tail of lotheader; tile-id→name/texture mapping (S2).

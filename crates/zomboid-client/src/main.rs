@@ -271,7 +271,7 @@ fn screenshot(
     scene: &Scene,
     cam: Camera,
     size: (u32, u32),
-    player: Option<(f32, f32)>,
+    player: Option<(f32, f32, i32)>,
     extra: Vec<Instance>,
     out: &str,
 ) -> anyhow::Result<()> {
@@ -296,7 +296,7 @@ fn screenshot(
     });
     let view = tex.create_view(&Default::default());
     let mut mk: Vec<Instance> = extra;
-    mk.extend(player.map(|(x, y)| scene.marker("__player", x, y, 0)));
+    mk.extend(player.map(|(x, y, z)| scene.marker("__player", x, y, z)));
     gfx.draw(&view, size, cam, &mk);
     let bpr = (size.0 * 4).div_ceil(256) * 256;
     let buf = gfx.device.create_buffer(&wgpu::BufferDescriptor {
@@ -575,6 +575,11 @@ fn main() -> anyhow::Result<()> {
         max_level: top,
         ambient: 1.0,
     };
+    if let Some(p) = &saved {
+        let position = iso(p.x as f32, p.y as f32, p.z);
+        cam.center = [position[0], position[1] - CAM_OVER_FEET];
+        cam.max_level = (p.z - scene.min_level).clamp(0, top as i32) as usize;
+    }
     if let Some(i) = a.iter().position(|s| s == "--shot") {
         let f = |n: usize, d: f32| a.get(i + n).and_then(|s| s.parse().ok()).unwrap_or(d);
         cam.center = [f(2, cam.center[0]), f(3, cam.center[1])];
@@ -582,10 +587,19 @@ fn main() -> anyhow::Result<()> {
         if let Some(j) = a.iter().position(|s| s == "--level") {
             cam.max_level = a[j + 1].parse().unwrap();
         }
-        let pl: Option<(f32, f32)> = a
+        let pl: Option<(f32, f32, i32)> = a
             .iter()
             .position(|s| s == "--player")
-            .map(|j| (a[j + 1].parse().unwrap(), a[j + 2].parse().unwrap()));
+            .map(|j| {
+                let z = a
+                    .iter()
+                    .position(|s| s == "--player-z")
+                    .and_then(|k| a.get(k + 1))
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0);
+                (a[j + 1].parse().unwrap(), a[j + 2].parse().unwrap(), z)
+            })
+            .or_else(|| saved.as_ref().map(|p| (p.x as f32, p.y as f32, p.z)));
         // Night ambient on lit squares: game/port luma ratio is ~0.8 in the room interior on two real frames (docs/COMPATIBILITY.md, tools/ratio_map.mjs).
         if a.iter().any(|s| s == "--lit-room") {
             cam.ambient = 0.8;
@@ -594,13 +608,13 @@ fn main() -> anyhow::Result<()> {
             cam.ambient = a[j + 1].parse().unwrap_or(1.0);
         }
         if a.iter().any(|s| s == "--lit-room") {
-            if let Some((px, py)) = pl {
+            if let Some((px, py, pz)) = pl {
                 println!(
                     "lit-room: {:?}, instances now {}",
                     scene.retain_rooms(
                         px,
                         py,
-                        0,
+                        pz,
                         a.iter().any(|s| s == "--probe-rooms"),
                         a.iter()
                             .position(|s| s == "--los")
@@ -617,7 +631,7 @@ fn main() -> anyhow::Result<()> {
                 root.join("media/maps/Muldraugh, KY/objects.lua"),
             )?)
             .map_err(|e| anyhow::anyhow!(e))?;
-            let (px, py) = pl.unwrap_or((gx, gy));
+            let (px, py, pz) = pl.unwrap_or((gx, gy, 0));
             extra = scene.zone_dots(
                 "__player",
                 &zs,
@@ -628,7 +642,7 @@ fn main() -> anyhow::Result<()> {
                     (px + 60.0) as i32,
                     (py + 60.0) as i32,
                 ),
-                0,
+                pz,
                 1.0,
             );
             println!("zone overlay '{}': {} dots", a[j + 1], extra.len());

@@ -25,7 +25,8 @@
         "Script item lists expose the measured Java-style methods used by the original Lua foraging iterator; item order and full UI remain unverified",
         "Script items expose sampled weight, visibility, skill and type properties; the real foraging filter is exercised on installed data",
         "Learned recipe IDs on script items now expose a zero-based list; selected magazines were checked against the original",
-        "Recipe names use their own translation lookup; selected Russian and fallback names match the original and connect to magazine recipe lists"
+        "Recipe names use their own translation lookup; selected Russian and fallback names match the original and connect to magazine recipe lists",
+        "Saved-player position and floor now initialize the window and offscreen screenshot; other saved world state remains unsupported"
       ]
     },
     {

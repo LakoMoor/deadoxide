@@ -69,7 +69,7 @@ const areas = [
     facts: ["26 cardinal, 32,768 diagonal, 256 water, 256 water-window, 4,096 window-flag, 8,192 mixed-solid and 9,216 adjacent-window static cases checked against the original", "a real water square at (1, 4803, 0) checked through loaded scene collision; no original walk trace", "continuous player movement, sliding, doors, window objects and stairs: incomplete", "zombies: placeholder", "inventory, crafting, skills, health: none"] },
   { id: "saves", name: "Saves", weight: 5, measured: false, score: 0.1,
     how: "author estimate: the player position is read from players.db; nothing else",
-    facts: ["player position is read from a real save", "time of day from map_t.bin is not decoded"] },
+    facts: ["player position and floor from a real save now drive window and offscreen camera; z=1 additionally checked with a synthetic copy", "save writing, changed world data and time of day are not implemented"] },
   { id: "ui", name: "Menus, interface, settings", weight: 5, measured: false, score: 0.05, how: "author estimate: a world window and a launcher exist, the game's UI does not", facts: ["DeadOxide launcher", "HUD, inventory, windows: none"] },
   { id: "audio", name: "Audio", weight: 5, measured: false, score: 0, how: "author estimate", facts: ["not started"] },
   { id: "net", name: "Multiplayer and networking", weight: 5, measured: false, score: 0, how: "author estimate", facts: ["not started"] },
