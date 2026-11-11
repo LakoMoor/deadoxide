@@ -1,0 +1,16 @@
+ALARM_CLOCK=base:alarmclock
+ALARM_CLOCK_CLOTHING=base:alarmclockclothing
+ANIMAL=base:animal
+CLOTHING=base:clothing
+CONTAINER=base:container
+DRAINABLE=base:drainable
+FOOD=base:food
+KEY=base:key
+KEY_RING=base:keyring
+LITERATURE=base:literature
+MAP=base:map
+MOVEABLE=base:moveable
+NORMAL=base:normal
+RADIO=base:radio
+WEAPON=base:weapon
+WEAPON_PART=base:weaponpart

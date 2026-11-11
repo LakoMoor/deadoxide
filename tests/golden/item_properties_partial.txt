@@ -1,0 +1,5 @@
+PROBE partial-load=UnsatisfiedLinkError
+PROBE types=base:literature,base:weapon,base:clothing
+PROBE Base.Axe=Base.Axe,3.0,false,false,,null,false,true,false
+PROBE Base.BookCarpentry1=Base.BookCarpentry1,1.0,false,false,Carpentry,null,true,false,false
+PROBE Base.F_Hair_Stubble=Base.F_Hair_Stubble,1.0,false,true,,null,false,false,true

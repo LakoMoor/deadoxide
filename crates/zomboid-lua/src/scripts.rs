@@ -39,6 +39,15 @@ pub fn install(lua: &Lua, root: &Path) -> Result<usize> {
                     props.set(k.as_str(), v.as_str())?;
                 }
                 t.set("props", props)?;
+                // Item.getActualWeight stores Java float precision; absent Weight defaults to 1.
+                let weight = it
+                    .props
+                    .iter()
+                    .rev()
+                    .find(|(key, _)| key.eq_ignore_ascii_case("Weight"))
+                    .and_then(|(_, value)| value.parse::<f32>().ok())
+                    .unwrap_or(1.0);
+                t.set("actualWeight", weight as f64)?;
                 t.set("module", m.name.as_str())?;
                 t.set("name", it.name.as_str())?;
                 let full = format!("{}.{}", m.name, it.name);
@@ -97,6 +106,20 @@ function ItemMT.getFullName(s) return s.fullType end
 function ItemMT.getModuleName(s) return s.module end
 function ItemMT.getName(s) return s.name end
 function ItemMT.getTypeString(s) return s.props.Type end
+-- These defaults and three built-in types were measured on original script items.
+function ItemMT.getActualWeight(s) return s.actualWeight end
+function ItemMT.getObsolete(s) return string.lower(s.props.Obsolete or s.props.obsolete or "false") == "true" end
+function ItemMT.isHidden(s) return string.lower(s.props.hidden or s.props.Hidden or "false") == "true" end
+function ItemMT.getSkillTrained(s) return s.props.SkillTrained or "" end
+function ItemMT.getRecordedMediaCat(s) return s.props.RecordedMediaCat end
+function ItemMT.isItemType(s, itemType) return itemType ~= nil and s.props.ItemType == itemType end
+rawset(_G, "ItemType", {
+  ALARM_CLOCK="base:alarmclock", ALARM_CLOCK_CLOTHING="base:alarmclockclothing",
+  ANIMAL="base:animal", CLOTHING="base:clothing", CONTAINER="base:container",
+  DRAINABLE="base:drainable", FOOD="base:food", KEY="base:key", KEY_RING="base:keyring",
+  LITERATURE="base:literature", MAP="base:map", MOVEABLE="base:moveable", NORMAL="base:normal",
+  RADIO="base:radio", WEAPON="base:weapon", WEAPON_PART="base:weaponpart"
+})
 for _, it in pairs(__ScriptItems) do setmetatable(it, ItemMT) end
 local SM = {}
 function SM:getItem(full) return __ScriptItems[full] end
@@ -153,6 +176,69 @@ mod tests {
     use std::path::Path;
 
     #[test]
+    fn real_item_properties_match_original_samples() -> mlua::Result<()> {
+        let lua = Lua::new();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        install(&lua, &root)?;
+        let inspect: mlua::Function = lua
+            .load(
+                r#"
+            return function(name)
+                local item = getScriptManager():getItem(name)
+                return item:getFullName(), item:getActualWeight(), item:getObsolete(),
+                    item:isHidden(), item:getSkillTrained(), item:getRecordedMediaCat(),
+                    item:isItemType(ItemType.LITERATURE), item:isItemType(ItemType.WEAPON),
+                    item:isItemType(ItemType.CLOTHING)
+            end
+        "#,
+            )
+            .eval()?;
+        let item_types: mlua::Table = lua.globals().get("ItemType")?;
+        for line in include_str!("../../../tests/golden/item_type_names.txt").lines() {
+            let (name, value) = line.split_once('=').expect("type oracle");
+            assert_eq!(item_types.get::<String>(name)?, value);
+        }
+        let oracle = include_str!("../../../tests/golden/item_properties_partial.txt");
+        for line in oracle.lines().skip(2) {
+            let (key, values) = line
+                .strip_prefix("PROBE ")
+                .expect("oracle prefix")
+                .split_once('=')
+                .expect("oracle entry");
+            let fields: Vec<_> = values.split(',').collect();
+            assert_eq!(fields.len(), 9);
+            let actual: (
+                String,
+                f64,
+                bool,
+                bool,
+                String,
+                Option<String>,
+                bool,
+                bool,
+                bool,
+            ) = inspect.call(key)?;
+            assert_eq!(actual.0, fields[0]);
+            assert_eq!(actual.1, fields[1].parse::<f64>().expect("weight"));
+            assert_eq!(actual.2.to_string(), fields[2]);
+            assert_eq!(actual.3.to_string(), fields[3]);
+            assert_eq!(actual.4, fields[4]);
+            assert_eq!(
+                actual.5.as_deref(),
+                if fields[5] == "null" {
+                    None
+                } else {
+                    Some(fields[5])
+                }
+            );
+            assert_eq!(actual.6.to_string(), fields[6]);
+            assert_eq!(actual.7.to_string(), fields[7]);
+            assert_eq!(actual.8.to_string(), fields[8]);
+        }
+        Ok(())
+    }
+
+    #[test]
     fn real_item_list_supports_original_lua_iterator() -> mlua::Result<()> {
         let lua = Lua::new();
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
@@ -179,12 +265,17 @@ mod tests {
             assert(list:contains(manager:getItem("Base.Axe")))
             assert(not pcall(function() list:get(-1) end))
             assert(not pcall(function() list:get(list:size()) end))
-            local n, found = 0, false
+            local n, found, visibleHidden = 0, false, false
             for item, i in iterList(list) do
                 assert(item == list:get(i))
                 n = n + 1
-                found = found or item:getFullName() == "Base.Axe"
+                -- The same filter used by forageSystem.doItemDefCheck.
+                if not item:getObsolete() and not item:isHidden() then
+                    found = found or item:getFullName() == "Base.Axe"
+                    visibleHidden = visibleHidden or item:getFullName() == "Base.F_Hair_Stubble"
+                end
             end
+            assert(not visibleHidden)
             return n, found
             "#
         );
