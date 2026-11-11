@@ -30,8 +30,8 @@ fn main() -> Result<()> {
                 }
             }
             let time = zomboid_content::save::load_game_time(&file).map_err(anyhow::Error::msg)?;
-            println!("save time {:02}:{:02} (raw {:.8}), year {}, month index {}, day index {}, version {}",
-                time.hour(), time.minutes(), time.time_of_day, time.year, time.month_index, time.day_index, time.version);
+            println!("save time {:02}:{:02} (raw {:.8}), year {}, month index {}, day index {}, nights {}, version {}",
+                time.hour(), time.minutes(), time.time_of_day, time.year, time.month_index, time.day_index, time.nights_survived, time.version);
             Ok(())
         }
         "check" => {

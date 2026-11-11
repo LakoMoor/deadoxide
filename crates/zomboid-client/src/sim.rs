@@ -320,7 +320,26 @@ pub fn measured_clock_step(time: f32, minutes_per_day: f32, effective_multiplier
     time + delta
 }
 
-/// Partial clock for normal single-player fixed-step operation. Events, weather and
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClockEvent {
+    Day,
+    Hour,
+    TenMinutes,
+    OneMinute,
+}
+
+impl ClockEvent {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Day => "EveryDays",
+            Self::Hour => "EveryHours",
+            Self::TenMinutes => "EveryTenMinutes",
+            Self::OneMinute => "EveryOneMinute",
+        }
+    }
+}
+
+/// Partial clock for normal single-player fixed-step operation. Event signals, weather and
 /// original pause/fast-forward controls are not yet connected.
 #[derive(Clone, Debug)]
 pub struct GameClock {
@@ -330,6 +349,7 @@ pub struct GameClock {
     pub day: u8,
     pub minutes_per_day: f32,
     pub effective_multiplier: f32,
+    pub nights_survived: i32,
 }
 
 impl GameClock {
@@ -347,12 +367,33 @@ impl GameClock {
         }
     }
 
-    /// zombie.GameTime.update: measured normal-mode clock and midnight date increment.
-    pub fn advance(&mut self, paused: bool) {
+    /// zombie.GameTime.getWorldAgeHours: reproduce the f32 arithmetic used for minute stamps.
+    fn minute_stamp(&self) -> i64 {
+        let nights = self.nights_survived as f32 * 24.0;
+        let age = if self.time >= 7.0 {
+            nights + (self.time - 7.0)
+        } else {
+            nights + (self.time + 17.0)
+        };
+        let minute = ((self.time - self.time.trunc()) * 60.0) as i64;
+        (age as i64) * 60 + minute
+    }
+
+    /// zombie.GameTime.update: measured normal-mode clock, date and ordered event signals.
+    /// The caller must dispatch these signals; weather and Lua handlers are not wired yet.
+    pub fn advance(&mut self, paused: bool) -> Vec<ClockEvent> {
         if paused {
-            return;
+            return Vec::new();
         }
-        self.time = measured_clock_step(self.time, self.minutes_per_day, self.effective_multiplier);
+        let previous = self.time;
+        let previous_stamp = self.minute_stamp();
+        let previous_hour = previous as i32;
+        let previous_ten = (((previous - previous.trunc()) * 60.0) as i32) / 10;
+        self.time = measured_clock_step(previous, self.minutes_per_day, self.effective_multiplier);
+        if previous <= 7.0 && self.time > 7.0 {
+            self.nights_survived = self.nights_survived.wrapping_add(1);
+        }
+        let mut events = Vec::new();
         if self.time >= 24.0 {
             self.time -= 24.0;
             self.day += 1;
@@ -364,7 +405,19 @@ impl GameClock {
                     self.year += 1;
                 }
             }
+            events.push(ClockEvent::Day);
         }
+        if self.time as i32 != previous_hour {
+            events.push(ClockEvent::Hour);
+        }
+        let ten = (((self.time - self.time.trunc()) * 60.0) as i32) / 10;
+        if ten != previous_ten {
+            events.push(ClockEvent::TenMinutes);
+        }
+        if self.minute_stamp() != previous_stamp {
+            events.push(ClockEvent::OneMinute);
+        }
+        events
     }
 
     pub fn from_save(
@@ -388,6 +441,7 @@ impl GameClock {
             // Controlled original trace: normal multiplier 1, fpsMultiplier 2 for 30 Hz.
             // Player sleep, UI speed, server and debug multipliers remain unimplemented.
             effective_multiplier: 1.6,
+            nights_survived: time.nights_survived,
         })
     }
 }
@@ -427,6 +481,8 @@ pub struct World {
     pub player: Player,
     pub zombies: Vec<Zombie>,
     pub clock: Option<GameClock>,
+    /// Signals emitted in the most recent step; Lua and weather dispatch are not yet connected.
+    pub clock_events: Vec<ClockEvent>,
 }
 
 impl World {
@@ -453,6 +509,7 @@ impl World {
             player,
             zombies,
             clock: None,
+            clock_events: Vec::new(),
         }
     }
 
@@ -490,9 +547,10 @@ impl World {
             z.x = zp.x;
             z.y = zp.y;
         }
-        if let Some(clock) = &mut self.clock {
-            clock.advance(false);
-        }
+        self.clock_events = self
+            .clock
+            .as_mut()
+            .map_or_else(Vec::new, |clock| clock.advance(false));
         self.tick += 1;
     }
 
@@ -514,6 +572,7 @@ impl World {
             mix(clock.year as u64);
             mix(clock.month as u64);
             mix(clock.day as u64);
+            mix(clock.nights_survived as u64);
         }
         for z in &self.zombies {
             mix(z.x.to_bits() as u64);
@@ -551,10 +610,111 @@ mod world_tests {
         (w.state_hash(), w)
     }
     #[test]
+    fn saved_world_clock_event_trace_matches_original() {
+        let saved = zomboid_content::save::SavedGameTime {
+            version: 249,
+            time_of_day: f32::from_bits(0x4136ca18),
+            nights_survived: 0,
+            year: 1993,
+            month_index: 6,
+            day_index: 8,
+        };
+        let day = zomboid_content::sandbox::SavedDayLength {
+            option: 4,
+            minutes: 90,
+        };
+        let collision = Collision::default();
+        let mut world = World::new(
+            1,
+            Player {
+                x: 0.5,
+                y: 0.5,
+                z: 0,
+            },
+            &collision,
+            0,
+            0,
+        );
+        world.clock = GameClock::from_save(&saved, &day);
+        let mut trace = Vec::new();
+        for _ in 0..150 {
+            world.step(&collision, (0.0, 0.0));
+            for event in &world.clock_events {
+                trace.push(format!("EVENT tick={} name={}", world.tick, event.name()));
+            }
+        }
+        let clock = world.clock.as_ref().expect("clock");
+        trace.push(format!(
+            "END bits={:08x} nights={}",
+            clock.time.to_bits(),
+            clock.nights_survived
+        ));
+        assert_eq!(
+            trace.join("\n"),
+            include_str!("../../../tests/golden/clock_saved_events.txt").trim()
+        );
+    }
+
+    #[test]
+    fn world_clock_events_match_original_order() {
+        let mut count = 0;
+        for line in include_str!("../../../tests/golden/clock_events.txt").lines() {
+            let (input, output) = line
+                .strip_prefix("EVENT ")
+                .unwrap()
+                .split_once('=')
+                .unwrap();
+            let (time, nights) = input.split_once('@').unwrap();
+            let mut fields = output.splitn(3, ',');
+            let expected_bits = u32::from_str_radix(fields.next().unwrap(), 16).unwrap();
+            let expected_nights: i32 = fields.next().unwrap().parse().unwrap();
+            let expected_events = fields.next().unwrap();
+            let collision = Collision::default();
+            let mut world = World::new(
+                1,
+                Player {
+                    x: 0.5,
+                    y: 0.5,
+                    z: 0,
+                },
+                &collision,
+                0,
+                0,
+            );
+            world.clock = Some(GameClock {
+                time: time.parse().unwrap(),
+                year: 1993,
+                month: 6,
+                day: 8,
+                minutes_per_day: 90.0,
+                effective_multiplier: 1.6,
+                nights_survived: nights.parse().unwrap(),
+            });
+            world.step(&collision, (0.0, 0.0));
+            let clock = world.clock.as_ref().unwrap();
+            assert_eq!(clock.time.to_bits(), expected_bits, "{line}");
+            assert_eq!(clock.nights_survived, expected_nights, "{line}");
+            assert_eq!(
+                world
+                    .clock_events
+                    .iter()
+                    .map(|e| e.name())
+                    .collect::<Vec<_>>()
+                    .join("|"),
+                expected_events,
+                "{line}"
+            );
+            count += 1;
+        }
+        assert_eq!(count, 10);
+    }
+
+    #[test]
     fn saved_clock_rejects_invalid_calendar_date() {
         let mut saved = zomboid_content::save::SavedGameTime {
             version: 249,
             time_of_day: 11.0,
+            nights_survived: 0,
             year: 1993,
             month_index: 1,
             day_index: 27,
@@ -608,6 +768,7 @@ mod world_tests {
                 day: 8,
                 minutes_per_day: day,
                 effective_multiplier: multiplier,
+                nights_survived: 0,
             });
             for step in 1..=100 {
                 world.step(&collision, (0.0, 0.0));
@@ -644,8 +805,9 @@ mod world_tests {
                 day: date[2] as u8,
                 minutes_per_day: 90.0,
                 effective_multiplier: 0.8,
+                nights_survived: 0,
             };
-            clock.advance(false);
+            let _ = clock.advance(false);
             assert_eq!(
                 clock.time.to_bits(),
                 u32::from_str_radix(fields[0], 16).unwrap(),
@@ -676,8 +838,9 @@ mod world_tests {
             day: 8,
             minutes_per_day: 30.0,
             effective_multiplier: 0.8,
+            nights_survived: 0,
         };
-        clock.advance(true);
+        let _ = clock.advance(true);
         assert_eq!(
             clock.time.to_bits(),
             u32::from_str_radix(after, 16).unwrap()

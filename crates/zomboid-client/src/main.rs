@@ -719,7 +719,7 @@ fn main() -> anyhow::Result<()> {
     if let (Some(time), Some(day)) = (&saved_time, &saved_day) {
         world.clock = sim::GameClock::from_save(time, day);
         if world.clock.is_some() {
-            println!("clock: experimental normal speed; game events, weather and speed controls not implemented");
+            println!("clock: experimental normal speed; event signals only, Lua/weather/speed controls not connected");
         } else {
             eprintln!("save clock unavailable: unsupported date");
         }
@@ -729,16 +729,23 @@ fn main() -> anyhow::Result<()> {
             .get(i + 1)
             .ok_or_else(|| anyhow::anyhow!("--headless-ticks requires a count"))?
             .parse()?;
+        let trace_events = a.iter().any(|arg| arg == "--trace-clock-events");
         for _ in 0..ticks {
             world.step(&scene.collision, (0.0, 0.0));
+            if trace_events {
+                for event in &world.clock_events {
+                    println!("clock event tick={} name={}", world.tick, event.name());
+                }
+            }
         }
         if let Some(clock) = &world.clock {
             println!(
-                "clock after {ticks} ticks: bits={:08x} year={} month_index={} day_index={}",
+                "clock after {ticks} ticks: bits={:08x} year={} month_index={} day_index={} nights={}",
                 clock.time.to_bits(),
                 clock.year,
                 clock.month,
-                clock.day
+                clock.day,
+                clock.nights_survived
             );
         } else {
             println!("clock after {ticks} ticks: unavailable (save time and sandbox day length required)");

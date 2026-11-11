@@ -41,6 +41,7 @@ pub fn load_player(db: &Path) -> Result<Option<SavedPlayer>, String> {
 pub struct SavedGameTime {
     pub version: i32,
     pub time_of_day: f32,
+    pub nights_survived: i32,
     pub year: i32,
     pub month_index: i32,
     pub day_index: i32,
@@ -58,7 +59,7 @@ impl SavedGameTime {
     }
 }
 
-/// zombie.GameTime.load: read only the measured time/date fields of a version 249 save.
+/// zombie.GameTime.load: read measured time, date and nights fields of a version 249 save.
 /// This does not parse or validate the remainder of the file.
 pub fn parse_game_time_prefix(bytes: &[u8]) -> Result<SavedGameTime, String> {
     if bytes.len() < 40 {
@@ -80,6 +81,7 @@ pub fn parse_game_time_prefix(bytes: &[u8]) -> Result<SavedGameTime, String> {
     Ok(SavedGameTime {
         version,
         time_of_day,
+        nights_survived: i32_at(12),
         day_index: i32_at(28),
         month_index: i32_at(32),
         year: i32_at(36),
@@ -164,6 +166,30 @@ mod tests {
         assert!(parse_game_time_prefix(&original[..39]).is_err());
         original[7] = 0;
         assert!(parse_game_time_prefix(&original).is_err());
+    }
+
+    #[test]
+    fn saved_nights_match_original_probe() {
+        let mut header = [0u8; 40];
+        header[..4].copy_from_slice(b"GMTM");
+        header[4..8].copy_from_slice(&249i32.to_be_bytes());
+        header[24..28].copy_from_slice(&11.0f32.to_bits().to_be_bytes());
+        let mut count = 0;
+        for line in include_str!("../../../tests/golden/save_nights.txt").lines() {
+            let (input, result) = line
+                .strip_prefix("NIGHTS ")
+                .unwrap()
+                .split_once('=')
+                .unwrap();
+            let expected = result.split(',').next().unwrap().parse::<i32>().unwrap();
+            header[12..16].copy_from_slice(&input.parse::<i32>().unwrap().to_be_bytes());
+            assert_eq!(
+                parse_game_time_prefix(&header).unwrap().nights_survived,
+                expected
+            );
+            count += 1;
+        }
+        assert_eq!(count, 4);
     }
 
     #[test]
