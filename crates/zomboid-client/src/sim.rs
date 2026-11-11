@@ -313,6 +313,15 @@ pub mod iso_zombie_constants {
     // speedType: SPRINTER=1, FAST_SHAMBLER=2, SHAMBLER=3, RANDOM=4; hearing: PINPOINT=1, NORMAL=2, POOR=3, RANDOM=4, NORMAL_OR_POOR=5
 }
 
+/// zombie.GameTime.update: numeric time increment for an unpaused normal-mode update.
+/// This does not run calendar, event, weather, pause or time-speed rules and is not yet
+/// wired to World; `effective_multiplier` must come from the original-equivalent runtime.
+#[allow(dead_code)]
+pub fn measured_clock_step(time: f32, minutes_per_day: f32, effective_multiplier: f32) -> f32 {
+    let delta = (1.0_f32 / minutes_per_day / 60.0 * effective_multiplier) / 2.0;
+    time + delta
+}
+
 pub const TICK_HZ: f32 = 30.0;
 
 /// xorshift64*: explicit, seedable, no global state.
@@ -460,6 +469,39 @@ mod world_tests {
         }
         (w.state_hash(), w)
     }
+    #[test]
+    fn numeric_clock_step_matches_original_short_traces() {
+        let mut cases = 0;
+        for line in include_str!("../../../tests/golden/clock_step.txt").lines() {
+            let (_, rest) = line.split_once(" actual=").expect("case header");
+            let (params, frames) = rest.split_once(" start=").expect("case fields");
+            let params: Vec<_> = params
+                .split(',')
+                .map(|s| u32::from_str_radix(s, 16).unwrap())
+                .collect();
+            let frames: Vec<_> = frames
+                .split(',')
+                .map(|s| u32::from_str_radix(s, 16).unwrap())
+                .collect();
+            assert_eq!((params.len(), frames.len()), (2, 4));
+            let (day, multiplier) = (f32::from_bits(params[0]), f32::from_bits(params[1]));
+            let mut time = f32::from_bits(frames[0]);
+            for frame in 1..=100 {
+                time = measured_clock_step(time, day, multiplier);
+                if let Some(index) = match frame {
+                    1 => Some(1),
+                    30 => Some(2),
+                    100 => Some(3),
+                    _ => None,
+                } {
+                    assert_eq!(time.to_bits(), frames[index], "{line}, frame {frame}");
+                }
+            }
+            cases += 1;
+        }
+        assert_eq!(cases, 12);
+    }
+
     #[test]
     fn same_seed_same_state_different_seed_differs() {
         assert_eq!(run(7).0, run(7).0);

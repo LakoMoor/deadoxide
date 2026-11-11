@@ -16,6 +16,19 @@ fn main() -> Result<()> {
             } else {
                 root
             };
+            if let Some(path) = file
+                .parent()
+                .map(|p| p.join("map_sand.bin"))
+                .filter(|p| p.is_file())
+            {
+                match zomboid_content::sandbox::load_day_length(&path) {
+                    Ok(day) => println!(
+                        "save day length {} minutes (option {})",
+                        day.minutes, day.option
+                    ),
+                    Err(e) => eprintln!("save day length unavailable: {e}"),
+                }
+            }
             let time = zomboid_content::save::load_game_time(&file).map_err(anyhow::Error::msg)?;
             println!("save time {:02}:{:02} (raw {:.8}), year {}, month index {}, day index {}, version {}",
                 time.hour(), time.minutes(), time.time_of_day, time.year, time.month_index, time.day_index, time.version);

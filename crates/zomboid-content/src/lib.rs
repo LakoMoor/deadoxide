@@ -3,6 +3,7 @@
 pub mod atlas;
 pub mod lot;
 pub mod pack;
+pub mod sandbox;
 pub mod save;
 pub mod script;
 pub mod tiledefs;

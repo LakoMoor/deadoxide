@@ -544,6 +544,18 @@ fn main() -> anyhow::Result<()> {
         } else {
             save_path.parent()
         };
+        if let Some(path) = folder
+            .map(|p| p.join("map_sand.bin"))
+            .filter(|p| p.is_file())
+        {
+            match zomboid_content::sandbox::load_day_length(&path) {
+                Ok(day) => println!(
+                    "save day length: {} minutes (option {}, not applied to simulation)",
+                    day.minutes, day.option
+                ),
+                Err(e) => eprintln!("save day length unavailable: {e}"),
+            }
+        }
         if let Some(path) = folder.map(|p| p.join("map_t.bin")).filter(|p| p.is_file()) {
             match zomboid_content::save::load_game_time(&path) {
                 Ok(t) => println!("save time: {:02}:{:02}, year {}, month index {}, day index {} (not applied to simulation)",
