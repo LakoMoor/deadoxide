@@ -379,12 +379,12 @@ impl Render for Launcher {
             .child(
                 div()
                     .text_color(rgb(MUTED))
-                    .child("Source: LakoMoor/deadoxide"),
+                    .child("Source: deadoxide-rust/deadoxide"),
             )
             .child(
                 div()
                     .text_color(rgb(MUTED))
-                    .child("Website: lakomoor.github.io/deadoxide"),
+                    .child("Website: deadoxide-rust.github.io/deadoxide"),
             )
             .child(
                 div()

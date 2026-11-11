@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-pub const SITE: &str = "https://lakomoor.github.io/deadoxide/";
+pub const SITE: &str = "https://deadoxide-rust.github.io/deadoxide/";
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Mod {

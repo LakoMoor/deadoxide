@@ -1,5 +1,5 @@
 // DeadOxide site: renders progress.json, the comparison gallery and the mod registry. No build step, no dependencies.
-const REPO = "LakoMoor/deadoxide";
+const REPO = "deadoxide-rust/deadoxide";
 const $ = (s, r = document) => r.querySelector(s);
 const el = (tag, attrs = {}, ...kids) => {
   const n = document.createElement(tag);

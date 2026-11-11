@@ -5,7 +5,7 @@
 An unofficial compatible runtime for **Project Zomboid** in Rust, modelled on [Horizon](https://github.com/horizon-rust/horizon) for Minecraft.
 It reads the files of your **own** copy of the game (Steam build 25485521, version 42.21.0). No game files are in this repository.
 
-**Progress, comparison with the original and mod catalog:** https://lakomoor.github.io/deadoxide/
+**Progress, comparison with the original and mod catalog:** https://deadoxide-rust.github.io/deadoxide/
 
 Roughly 20% is ported (a weighted estimate; some areas are author estimates, and the site and `tools/gen_progress.mjs` show how each number is computed).
 It is not playable yet: no zombies, inventory, sound or networking. What exists: readers for the game's formats, running the game's Lua, and a picture of the world.
@@ -13,7 +13,7 @@ It is not playable yet: no zombies, inventory, sound or networking. What exists:
 ## Run
 
 ```sh
-git clone https://github.com/LakoMoor/deadoxide    # place the folder inside your ProjectZomboid folder
+git clone https://github.com/deadoxide-rust/deadoxide    # place the folder inside your ProjectZomboid folder
 cargo build --release
 cargo run --release -p deadoxide-launcher           # launcher: play, mods, progress (GPUI)
 ```
