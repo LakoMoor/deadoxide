@@ -1,0 +1,11 @@
+PROBE native-unavailable=UnsatisfiedLinkError
+PROBE size=5092
+PROBE empty=false
+PROBE first=Base.WildGarlicCataplasm
+PROBE axe=Base.Axe
+PROBE same-manager=true
+PROBE global-size=5092
+PROBE contains-axe=true
+PROBE first-consistent=true
+PROBE negative-index=error
+PROBE end-index=error

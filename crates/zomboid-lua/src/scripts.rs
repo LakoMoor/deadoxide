@@ -101,9 +101,28 @@ for _, it in pairs(__ScriptItems) do setmetatable(it, ItemMT) end
 local SM = {}
 function SM:getItem(full) return __ScriptItems[full] end
 function SM:FindItem(name) return __ScriptItems[name] or __ScriptItems["Base." .. tostring(name)] end
-function SM:getAllItems() local t = {}; for i, f in ipairs(__ScriptItemOrder) do t[i] = __ScriptItems[f] end; return t end
-ScriptManager = rawset and { instance = SM }
+-- ScriptManager.getAllItems returns a Java ArrayList. Retain the Lua array
+-- representation for existing harness users but expose the measured list API.
+local ItemList = {}
+function ItemList:size() return #self end
+function ItemList:isEmpty() return #self == 0 end
+function ItemList:get(index)
+  if type(index) ~= "number" or index ~= math.floor(index) or index < 0 or index >= #self then
+    error("IndexOutOfBoundsException", 2)
+  end
+  return self[index + 1]
+end
+function ItemList:contains(item)
+  for i = 1, #self do if self[i] == item then return true end end
+  return false
+end
+function SM:getAllItems()
+  local t = {}; for i, f in ipairs(__ScriptItemOrder) do t[i] = __ScriptItems[f] end
+  return setmetatable(t, { __index = ItemList })
+end
 rawset(_G, "ScriptManager", { instance = SM, getInstance = function() return SM end })
+rawset(_G, "getScriptManager", function() return SM end)
+rawset(_G, "getAllItems", function() return SM:getAllItems() end)
 -- Real event registry (LuaEventManager semantics: Add/Remove/Trigger by event name).
 local ev = {}
 local function event(name)
@@ -125,4 +144,53 @@ rawset(_G, "triggerEvent", function(name, ...) event(name).Trigger(...) end)
 rawset(_G, "LuaEventManager", { AddEvent = function(name) event(name) end, triggerEvent = function(name, ...) event(name).Trigger(...) end })
 "#).exec()?;
     Ok(n)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::install;
+    use mlua::Lua;
+    use std::path::Path;
+
+    #[test]
+    fn real_item_list_supports_original_lua_iterator() -> mlua::Result<()> {
+        let lua = Lua::new();
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let count = install(&lua, &root)?;
+        let original =
+            std::fs::read_to_string(root.join("media/lua/shared/Foraging/forageSystem.lua"))
+                .map_err(mlua::Error::external)?;
+        let start = original
+            .find("local function iterList(_list)")
+            .expect("iterator start");
+        let end = original[start..]
+            .find("local function isInRect")
+            .expect("iterator end")
+            + start;
+        let chunk = format!(
+            "{}\n{}",
+            &original[start..end],
+            r#"
+            local manager = getScriptManager()
+            local list = manager:getAllItems()
+            assert(manager == ScriptManager.instance)
+            assert(list:size() == getAllItems():size())
+            assert(not list:isEmpty())
+            assert(list:contains(manager:getItem("Base.Axe")))
+            assert(not pcall(function() list:get(-1) end))
+            assert(not pcall(function() list:get(list:size()) end))
+            local n, found = 0, false
+            for item, i in iterList(list) do
+                assert(item == list:get(i))
+                n = n + 1
+                found = found or item:getFullName() == "Base.Axe"
+            end
+            return n, found
+            "#
+        );
+        let (iterated, found): (usize, bool) = lua.load(&chunk).eval()?;
+        assert_eq!(iterated, count);
+        assert!(found);
+        Ok(())
+    }
 }

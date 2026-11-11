@@ -31,7 +31,7 @@
         "Lua files without error under stubs: 1393 of 1395",
         "undefined Java names the Lua touches: 121",
         "selected real-client log lines reproduced: 22 of 22",
-        "numeric literals, translation formatting, RU fallback and item-name lookup checked against selected original Java cases"
+        "numeric literals, translation formatting, RU fallback, item-name lookup and item-list API checked against selected original Java cases"
       ],
       "percent": 20
     },
@@ -130,6 +130,6 @@
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
     "goldenLogLines": 22,
-    "testsPassed": 41
+    "testsPassed": 42
   }
 }
