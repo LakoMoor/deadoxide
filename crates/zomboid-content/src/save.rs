@@ -1,5 +1,6 @@
 //! Saved game: the local player row of `players.db` (SQLite) in a save folder (build 42.21.0, table `localPlayers`).
-//! Opened read-only; callers should point it at a COPY of a save that a running game may hold open.
+//! Reads use a read-only SQLite connection, which includes committed WAL data. SQLite may use
+//! or create transient WAL shared-memory sidecars; this does not restore other saved world state.
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 

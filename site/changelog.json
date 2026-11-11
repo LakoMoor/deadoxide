@@ -27,7 +27,8 @@
         "Learned recipe IDs on script items now expose a zero-based list; selected magazines were checked against the original",
         "Recipe names use their own translation lookup; selected Russian and fallback names match the original and connect to magazine recipe lists",
         "Saved-player position and floor now initialize the window and offscreen screenshot; other saved world state remains unsupported",
-        "Version 249 save time and date fields are readable and checked against original GameTime.load; simulation and lighting do not yet use them"
+        "Version 249 save time and date fields are readable and checked against original GameTime.load; simulation and lighting do not yet use them",
+        "Save loading now reads committed SQLite WAL changes instead of copying the database file alone; a synthetic live-writer regression checks the position"
       ]
     },
     {

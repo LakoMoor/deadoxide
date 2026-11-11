@@ -531,7 +531,7 @@ fn main() -> anyhow::Result<()> {
     env_logger::init();
     let a: Vec<String> = std::env::args().collect();
     let root = std::path::PathBuf::from(a.get(1).map(String::as_str).unwrap_or(".."));
-    // --save <save folder or players.db>: start where the real saved character stands (read from a copy; the game may hold the file)
+    // --save <save folder or players.db>: read a consistent committed player row, including WAL.
     let saved = a
         .iter()
         .position(|s| s == "--save")
@@ -729,7 +729,7 @@ fn spawn(scene: &Scene, gx: f32, gy: f32) -> Player {
     Player { x: gx, y: gy, z: 0 }
 }
 
-/// Reads the local player of a save (a save folder containing players.db, or the db itself) via a temporary copy.
+/// Reads one consistent local-player row through SQLite's read-only connection.
 fn load_saved_player(path: &str) -> anyhow::Result<zomboid_content::save::SavedPlayer> {
     let p = std::path::Path::new(path);
     let db = if p.is_dir() {
@@ -737,9 +737,41 @@ fn load_saved_player(path: &str) -> anyhow::Result<zomboid_content::save::SavedP
     } else {
         p.to_path_buf()
     };
-    let tmp = std::env::temp_dir().join(format!("zomboid_rs_players_{}.db", std::process::id()));
-    std::fs::copy(&db, &tmp)?;
-    let r = zomboid_content::save::load_player(&tmp).map_err(|e| anyhow::anyhow!(e));
-    let _ = std::fs::remove_file(&tmp);
-    r?.ok_or_else(|| anyhow::anyhow!("no local player in {}", db.display()))
+    zomboid_content::save::load_player(&db)
+        .map_err(anyhow::Error::msg)?
+        .ok_or_else(|| anyhow::anyhow!("no local player in {}", db.display()))
+}
+
+#[cfg(test)]
+mod save_tests {
+    use super::load_saved_player;
+    use rusqlite::Connection;
+
+    #[test]
+    fn saved_player_includes_committed_wal_without_changing_database() -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let db = dir.path().join("players.db");
+        let writer = Connection::open(&db)?;
+        writer.execute_batch("PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0;
+            CREATE TABLE localPlayers(id INTEGER, name TEXT, x REAL, y REAL, z REAL, isDead INTEGER);
+            INSERT INTO localPlayers VALUES(1, 'Test', 1.0, 2.0, 0.0, 0);
+            PRAGMA wal_checkpoint(TRUNCATE);
+            UPDATE localPlayers SET x=42.5, y=67.25, z=1.0 WHERE id=1;")?;
+        let original_bytes = std::fs::read(&db)?;
+        // Copying just the database loses the committed WAL update: demonstrate
+        // the exact client regression with the writer still open.
+        let stale = dir.path().join("main-only.db");
+        std::fs::copy(&db, &stale)?;
+        let old = load_saved_player(stale.to_str().ok_or_else(|| anyhow::anyhow!("path"))?)?;
+        assert_eq!((old.x, old.y, old.z), (1.0, 2.0, 0));
+        let current =
+            load_saved_player(dir.path().to_str().ok_or_else(|| anyhow::anyhow!("path"))?)?;
+        assert_eq!((current.x, current.y, current.z), (42.5, 67.25, 1));
+        assert_eq!(std::fs::read(&db)?, original_bytes);
+        let x: f64 = writer.query_row("SELECT x FROM localPlayers WHERE id=1", [], |row| {
+            row.get(0)
+        })?;
+        assert_eq!(x, 42.5);
+        Ok(())
+    }
 }
