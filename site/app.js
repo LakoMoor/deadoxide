@@ -33,12 +33,12 @@ async function progress() {
   }
   const n = p.numbers;
   const stats = [
-    [`${fmt(n.luaOk)} / ${fmt(n.luaAll)}`, "of the game's Lua files run without error"],
-    [`${n.logKindsMatched} / ${n.goldenLogLines}`, "real-client log line kinds reproduced"],
+    [`${fmt(n.luaOk)} / ${fmt(n.luaAll)}`, "Lua files run without error under placeholder APIs"],
+    [`${n.logKindsMatched} / ${n.goldenLogLines}`, "selected real-client log lines reproduced, sorted"],
     [fmt(n.zones), "Muldraugh map zones checked against the real Lua"],
     [`${n.frameDiff1} → ${n.frameDiffBeforeMask}`, "mean frame difference from the game out of 255: now → before the visibility mask"],
     [fmt(n.tilesUsed - n.tilesMissing) + " / " + fmt(n.tilesUsed), "tile names found in texture packs"],
-    [fmt(n.testsPassed), "automated tests pass"],
+    [fmt(n.testsPassed), "tests pass in the four core crates; launcher excluded"],
   ];
   $("#stats").append(...stats.map(([b, s]) => el("div", { class: "stat" }, el("b", {}, b), el("span", {}, s))));
 }

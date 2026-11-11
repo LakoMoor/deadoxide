@@ -5,6 +5,7 @@
 //! `require` rules (taken from the real client's log, see tests/golden/lua_real): a module is only visible from
 //! its own directory tree or `shared`; requiring a module that is still loading logs `recursive require()`;
 //! an unresolvable module logs `require("x") failed`. Warnings are printed in the real log's normalised form.
+mod kahlua;
 mod scripts;
 mod text;
 use mlua::{Lua, Table};
@@ -56,11 +57,16 @@ fn main() -> mlua::Result<()> {
         let (mut ok, mut bad) = (0, 0);
         for f in &files {
             let src = std::fs::read(f).map_err(mlua::Error::external)?;
-            match lua
-                .load(&src[..])
-                .set_name(f.to_string_lossy())
-                .into_function()
-            {
+            let name = f.to_string_lossy();
+            let mut compiled = lua.load(&src[..]).set_name(name.as_ref()).into_function();
+            if matches!(&compiled, Err(e) if e.to_string().contains("malformed number")) {
+                let normalized = kahlua::strip_float_suffixes(&src);
+                compiled = lua
+                    .load(&normalized[..])
+                    .set_name(name.as_ref())
+                    .into_function();
+            }
+            match compiled {
                 Ok(_) => ok += 1,
                 Err(e) => {
                     bad += 1;
@@ -76,9 +82,10 @@ fn main() -> mlua::Result<()> {
         return Ok(());
     }
     let nitems = scripts::install(&lua, &root)?;
+    let lang = std::env::var("ZOMBOID_LANG").unwrap_or_else(|_| "EN".to_owned());
     println!(
-        "ScriptManager: {nitems} item scripts; EN strings: {}",
-        text::install(&lua, &root, "EN")?
+        "ScriptManager: {nitems} item scripts; {lang} strings: {}",
+        text::install(&lua, &root, &lang)?
     );
     lua.load(include_str!("prelude.lua")).exec()?;
 
@@ -120,30 +127,7 @@ fn main() -> mlua::Result<()> {
             // Kahlua accepts Java float literals (`0.0f`); stock Lua 5.1 does not. Retry with the suffix stripped,
             // only for files that fail with "malformed number".
             if matches!(&r, Err(e) if e.to_string().contains("malformed number")) {
-                let b: &[u8] = &src;
-                let mut out: Vec<u8> = Vec::with_capacity(b.len());
-                let mut i = 0;
-                while i < b.len() {
-                    let c = b[i];
-                    if c == b'f'
-                        && i > 0
-                        && b[i - 1].is_ascii_digit()
-                        && !b
-                            .get(i + 1)
-                            .is_some_and(|n| n.is_ascii_alphanumeric() || *n == b'_')
-                    {
-                        let mut j = i - 1;
-                        while j > 0 && (b[j].is_ascii_digit() || b[j] == b'.') {
-                            j -= 1;
-                        }
-                        if !(b[j].is_ascii_alphabetic() || b[j] == b'_') {
-                            i += 1;
-                            continue;
-                        }
-                    }
-                    out.push(c);
-                    i += 1;
-                }
+                let out = kahlua::strip_float_suffixes(&src);
                 r = lua.load(&out[..]).set_name(path.clone()).exec();
             }
             st.borrow_mut().stack.pop();

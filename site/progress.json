@@ -1,14 +1,14 @@
 {
-  "generated": "2026-11-08",
+  "generated": "2026-11-11",
   "game": "Project Zomboid 42.21.0 (Steam build 25485521)",
   "overall": 20.5,
-  "note": "The overall percentage is a weighted estimate. Measured areas are computed by commands (see how/facts); the rest are author estimates, marked measured:false.",
+  "note": "Overall and area percentages are subjective weighted estimates, not measured game parity. Facts list the limited measured cases. Full compatibility is unknown.",
   "areas": [
     {
       "id": "formats",
       "name": "Reading the game's files",
       "weight": 15,
-      "measured": true,
+      "measured": false,
       "score": 0.5,
       "how": "share of the game's format families we read (list below); coverage inside each family is also incomplete",
       "facts": [
@@ -24,13 +24,14 @@
       "id": "lua",
       "name": "The game's Lua scripts run",
       "weight": 20,
-      "measured": true,
+      "measured": false,
       "score": 0.19971326164874553,
       "how": "Lua files that execute without error, counted as 20% of the area weight (running is not the same as correct); the rest is the real Java API, which barely exists yet (author estimate: ~0)",
       "facts": [
-        "Lua files without error: 1393 of 1395",
+        "Lua files without error under stubs: 1393 of 1395",
         "undefined Java names the Lua touches: 121",
-        "real-client log line kinds reproduced: 22"
+        "selected real-client log lines reproduced: 22 of 22",
+        "numeric literals, translation formatting, RU fallback and item-name lookup checked against selected original Java cases"
       ],
       "percent": 20
     },
@@ -38,12 +39,12 @@
       "id": "render",
       "name": "World rendering",
       "weight": 20,
-      "measured": true,
+      "measured": false,
       "score": 0.3736666666666667,
       "how": "frame similarity to the game, 1 - (diff/60), times 0.5: lighting, characters, weather and animation are not there yet",
       "facts": [
         "frame 1 difference from the game: 15.16 of 255",
-        "frame 2 (held-out) difference: 26.09 of 255",
+        "frame 2 difference: 26.09 of 255 (lighting factor was also checked on this frame)",
         "before the visibility mask: 79.68 of 255"
       ],
       "percent": 37.4
@@ -56,7 +57,9 @@
       "score": 0.03,
       "how": "author estimate: a 30 Hz step, movement and collision exist in simplified form; zombies are placeholders with invented parameters",
       "facts": [
-        "player movement and collision (simplified)",
+        "26 cardinal, 32,768 diagonal, 256 water, 256 water-window, 4,096 window-flag, 8,192 mixed-solid and 9,216 adjacent-window static cases checked against the original",
+        "a real water square at (1, 4803, 0) checked through loaded scene collision; no original walk trace",
+        "continuous player movement, sliding, doors, window objects and stairs: incomplete",
         "zombies: placeholder",
         "inventory, crafting, skills, health: none"
       ],
@@ -126,7 +129,7 @@
     "frameDiff2": 26.09,
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
-    "goldenLogLines": 23,
-    "testsPassed": 19
+    "goldenLogLines": 22,
+    "testsPassed": 41
   }
 }

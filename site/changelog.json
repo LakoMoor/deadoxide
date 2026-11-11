@@ -1,6 +1,30 @@
 {
   "releases": [
     {
+      "version": "unreleased",
+      "date": "2026-11-11",
+      "new": [
+        "Added a current headless Rosewood screenshot of the Rust client",
+        "Tested selected Kahlua numeric literals and translation formats directly against the installed game's Java classes",
+        "Russian translation lookup and English fallback checked against the original; select the Lua harness language with ZOMBOID_LANG"
+      ],
+      "fixed": [
+        "Lua numeric suffix handling preserves strings, comments and hexadecimal literals",
+        "Translation formatting handles tested positional and legacy placeholders without recursively rewriting inserted values",
+        "Static collision uses collideN/collideW flags; sampled original square-collision behavior no longer treats WallN/WallW alone as blocked",
+        "Static diagonal collision checked against 16,384 original square scenarios; player sliding remains approximate",
+        "Water and solidtrans square flags checked against 256 original static collision scenarios",
+        "Window and solidtrans static collision checked against 4096 original square scenarios; real window interaction remains incomplete",
+        "Adjacent window and hoppable flags now affect static collision as measured on 1152 original square scenarios",
+        "Fixed a measured interaction between water, transparent-solid and window flags; other combinations remain under investigation",
+        "Progress labels distinguish subjective estimates from measured checks",
+        "Windows workspace checks now include launcher tests using a local shader compiler wrapper",
+        "Item names are kept separate from text and map description keys, with selected Russian names checked against original Lua globals",
+        "Uppercase, boolean and previous-argument translation formats checked against selected original cases",
+        "Expanded static collision comparisons to eight directions and mixed solid and window flags"
+      ]
+    },
+    {
       "version": "0.1.0",
       "date": "2026-11-08",
       "new": [

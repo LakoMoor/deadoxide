@@ -399,6 +399,26 @@ fn main() -> Result<()> {
                     d.tiles.values().filter(|t| t.contains_key(p)).count()
                 );
             }
+            for (label, required) in [
+                ("solidtrans+window", &["solidtrans", "windowN"][..]),
+                ("solidtrans+Window", &["solidtrans", "WindowN"][..]),
+                ("water+solidtrans", &["water", "solidtrans"][..]),
+                ("windowN+collideN", &["windowN", "collideN"][..]),
+                ("windowW+collideW", &["windowW", "collideW"][..]),
+            ] {
+                let mut names: Vec<_> = d
+                    .tiles
+                    .iter()
+                    .filter(|(_, props)| required.iter().all(|p| props.contains_key(*p)))
+                    .map(|(name, _)| name.as_str())
+                    .collect();
+                names.sort_unstable();
+                println!(
+                    "  {label:22} {} examples: {}",
+                    names.len(),
+                    names.iter().take(3).copied().collect::<Vec<_>>().join(", ")
+                );
+            }
             Ok(())
         }
         "scripts" => {

@@ -18,7 +18,9 @@ cargo build --release
 cargo run --release -p deadoxide-launcher           # launcher: play, mods, progress (GPUI)
 ```
 
-Client without the launcher: `play.cmd`. Checks: `sh tools/check.sh`.
+The Lua harness defaults to English; set `ZOMBOID_LANG=RU` to load Russian translations over English fallback (other languages are supported experimentally). This does not yet change the client UI language.
+
+Client without the launcher: `play.cmd`. Checks: `sh tools/check.sh`; on Windows with PowerShell 7 and the Windows SDK, use `pwsh -NoProfile -File tools/check.ps1` (add `-Quick` to skip Lua log parity). The Windows script uses a local fxc wrapper for the GPUI shader include issue and leaves the installed dependency untouched.
 
 ## Mods
 

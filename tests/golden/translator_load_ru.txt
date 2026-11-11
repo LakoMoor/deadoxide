@@ -1,0 +1,10 @@
+PROBE language=RU
+PROBE stack=EN
+PROBE stack=RU
+PROBE after=RU
+PROBE Challenge_YouHaveOneDay_name=У вас один день
+PROBE nullable=У вас один день
+PROBE UI_servers_last_wipe=Last Wipe:
+PROBE nullable=Last Wipe:
+PROBE UI_ProbeAbsent=UI_ProbeAbsent
+PROBE nullable=null

@@ -1,25 +1,34 @@
 //! Window-free simulation core: collision grid and player movement (fixed-step friendly, no wall clock, no RNG).
 //!
-//! Collision rules are a SIMPLIFIED reading of tile properties and are not yet diffed against the original:
-//! - a square is blocked if any tile on it has `solid` or `solidtrans`;
-//! - `WallN`/`collideN` block crossing the north edge of the square, `WallW`/`collideW` the west edge;
-//! - doors and windows are treated as passable for now.
+//! Collision rules are SIMPLIFIED; static flags have limited original-side checks:
+//! - `solid` blocks entry; `solidtrans` does unless the square has a window flag;
+//! - a square with both `water` and `solidtrans` also blocks movement out;
+//! - `collideN` blocks the north edge and `collideW` the west edge;
+//! - diagonal static square checks cover four edges; continuous movement remains approximate;
+//! - door and window object state and stairs are not implemented.
 use std::collections::HashMap;
 
-pub const BLOCK: u8 = 1;
-pub const EDGE_N: u8 = 2;
-pub const EDGE_W: u8 = 4;
+pub const BLOCK: u16 = 1;
+pub const EDGE_N: u16 = 2;
+pub const EDGE_W: u16 = 4;
+pub const WATER: u16 = 8;
+pub const SOLID_TRANS: u16 = 16;
+pub const SOLID: u16 = 32;
+pub const WINDOW: u16 = 64;
+pub const WINDOW_N: u16 = 128;
+pub const WINDOW_W: u16 = 256;
+pub const HOPPABLE: u16 = 512;
 
 #[derive(Default)]
 pub struct Collision {
-    flags: HashMap<(i32, i32, i32), u8>,
+    flags: HashMap<(i32, i32, i32), u16>,
 }
 
 impl Collision {
-    pub fn add(&mut self, x: i32, y: i32, z: i32, f: u8) {
+    pub fn add(&mut self, x: i32, y: i32, z: i32, f: u16) {
         *self.flags.entry((x, y, z)).or_default() |= f;
     }
-    fn f(&self, x: i32, y: i32, z: i32) -> u8 {
+    fn f(&self, x: i32, y: i32, z: i32) -> u16 {
         self.flags.get(&(x, y, z)).copied().unwrap_or(0)
     }
     #[allow(dead_code)] // API kept for tests and the CLI; the window path does not call it yet
@@ -33,7 +42,7 @@ impl Collision {
     pub fn blocked(&self, x: i32, y: i32, z: i32) -> bool {
         self.f(x, y, z) & BLOCK != 0
     }
-    /// Line of sight from a point to the centre of a square (walls/solid squares block; doors and windows are see-through, as in `can_step`).
+    /// Experimental line of sight using the movement collision grid; door/window transparency is not modelled.
     /// EXPERIMENT: not yet diffed against the real game beyond three frames.
     pub fn los(&self, from: (f32, f32), to: (i32, i32), z: i32) -> bool {
         let (tx, ty) = (to.0 as f32 + 0.5, to.1 as f32 + 0.5);
@@ -68,11 +77,7 @@ impl Collision {
         }
         true
     }
-    /// Can an actor move between two edge-adjacent squares?
-    pub fn can_step(&self, from: (i32, i32), to: (i32, i32), z: i32) -> bool {
-        if self.blocked(to.0, to.1, z) {
-            return false;
-        }
+    fn edge_open(&self, from: (i32, i32), to: (i32, i32), z: i32) -> bool {
         let (dx, dy) = (to.0 - from.0, to.1 - from.1);
         match (dx, dy) {
             (1, 0) => self.f(to.0, to.1, z) & EDGE_W == 0,
@@ -80,6 +85,40 @@ impl Collision {
             (0, 1) => self.f(to.0, to.1, z) & EDGE_N == 0,
             (0, -1) => self.f(from.0, from.1, z) & EDGE_N == 0,
             _ => true,
+        }
+    }
+
+    /// zombie.iso.IsoGridSquare.CalculateCollide: partial static adjacent-square collision check.
+    pub fn can_step(&self, from: (i32, i32), to: (i32, i32), z: i32) -> bool {
+        let from_flags = self.f(from.0, from.1, z);
+        let destination = self.f(to.0, to.1, z);
+        let south = self.f(to.0, to.1 + 1, z);
+        let east = self.f(to.0 + 1, to.1, z);
+        let near_window = destination & (WINDOW | HOPPABLE) != 0
+            || south & (WINDOW_N | HOPPABLE) != 0
+            || east & (WINDOW_W | HOPPABLE) != 0;
+        let blocked_destination = destination & SOLID != 0
+            || (destination & SOLID_TRANS != 0 && !near_window)
+            // The BLOCK bit is also used by synthetic and placeholder callers.
+            || (destination & BLOCK != 0 && destination & (SOLID | SOLID_TRANS) == 0);
+        if blocked_destination
+            || from_flags & (WATER | SOLID_TRANS) == (WATER | SOLID_TRANS)
+            || destination & (WATER | SOLID_TRANS) == (WATER | SOLID_TRANS)
+        {
+            return false;
+        }
+        let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+        if dx.abs() == 1 && dy.abs() == 1 {
+            // The original's static diagonal check tests all four edges, but
+            // does not treat a solid side square as a solid destination.
+            let x_side = (to.0, from.1);
+            let y_side = (from.0, to.1);
+            self.edge_open(from, x_side, z)
+                && self.edge_open(from, y_side, z)
+                && self.edge_open(x_side, to, z)
+                && self.edge_open(y_side, to, z)
+        } else {
+            self.edge_open(from, to, z)
         }
     }
 }
@@ -95,6 +134,10 @@ impl Player {
     /// Axis-separated move (world axes, tiles). Returns true if it moved at all.
     pub fn step(&mut self, c: &Collision, dx: f32, dy: f32) -> bool {
         let mut moved = false;
+        let origin = (self.x.floor() as i32, self.y.floor() as i32);
+        let diagonal_target = ((self.x + dx).floor() as i32, (self.y + dy).floor() as i32);
+        let crosses_diagonal =
+            (origin.0 - diagonal_target.0).abs() == 1 && (origin.1 - diagonal_target.1).abs() == 1;
         for (ax, ay) in [(dx, 0.0), (0.0, dy)] {
             if ax == 0.0 && ay == 0.0 {
                 continue;
@@ -103,7 +146,13 @@ impl Player {
             let from = (self.x.floor() as i32, self.y.floor() as i32);
             let to = (nx.floor() as i32, ny.floor() as i32);
             // large steps are split by the caller; here at most one square is crossed
-            if from == to || c.can_step(from, to, self.z) {
+            // PLACEHOLDER: retain axis-separated sliding; exact character
+            // collision response has not been traced in the original.
+            let diagonal_ok = !(crosses_diagonal
+                && to == diagonal_target
+                && from != origin
+                && !c.can_step(origin, diagonal_target, self.z));
+            if diagonal_ok && (from == to || c.can_step(from, to, self.z)) {
                 self.x = nx;
                 self.y = ny;
                 moved = true;
@@ -116,6 +165,79 @@ impl Player {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn diagonal_static_flags_match_original_oracle() {
+        // Four directions x 4096 flag combinations, generated by DiagonalProbe.
+        let oracle = include_str!("../../../tests/golden/collision_diagonal.txt");
+        let mut checked = 0;
+        for line in oracle.lines() {
+            let (direction, bits) = line.split_once(':').expect("oracle line");
+            let (dx, dy) = direction.split_once(',').expect("oracle direction");
+            let dx: i32 = dx.parse().expect("dx");
+            let dy: i32 = dy.parse().expect("dy");
+            assert_eq!(bits.len(), 4096);
+            for (mask, expected) in bits.bytes().enumerate() {
+                let mut c = Collision::default();
+                for (i, (x, y)) in [(0, 0), (dx, 0), (0, dy), (dx, dy)].into_iter().enumerate() {
+                    c.add(x, y, 0, ((mask >> (3 * i)) & 7) as u16);
+                }
+                assert_eq!(
+                    !c.can_step((0, 0), (dx, dy), 0),
+                    expected == b'1',
+                    "direction={direction}, mask={mask}"
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 16_384);
+    }
+
+    #[test]
+    fn diagonal_solidtrans_matches_original_oracle() {
+        // The original probe replaces `solid` with `solidtrans` on all four
+        // squares and produces the same 16,384 outputs as this saved fixture.
+        let oracle = include_str!("../../../tests/golden/collision_diagonal.txt");
+        let mut checked = 0;
+        for line in oracle.lines() {
+            let (direction, bits) = line.split_once(':').expect("oracle line");
+            let (dx, dy) = direction.split_once(',').expect("oracle direction");
+            let dx: i32 = dx.parse().expect("dx");
+            let dy: i32 = dy.parse().expect("dy");
+            assert_eq!(bits.len(), 4096);
+            for (mask, expected) in bits.bytes().enumerate() {
+                let mut c = Collision::default();
+                for (i, (x, y)) in [(0, 0), (dx, 0), (0, dy), (dx, dy)].into_iter().enumerate() {
+                    let f = ((mask >> (3 * i)) & 7) as u16;
+                    let flags = if f & BLOCK != 0 { f | SOLID_TRANS } else { f };
+                    c.add(x, y, 0, flags);
+                }
+                assert_eq!(
+                    !c.can_step((0, 0), (dx, dy), 0),
+                    expected == b'1',
+                    "direction={direction}, mask={mask}"
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 16_384);
+    }
+
+    #[test]
+    fn simultaneous_diagonal_crossing_does_not_cut_through_blocked_edge() {
+        let mut c = Collision::default();
+        // North edge of the southern neighbour blocks one of the four edges
+        // checked by the original, even though the x-then-y path is open.
+        c.add(0, 1, 0, EDGE_N);
+        let mut player = Player {
+            x: 0.95,
+            y: 0.95,
+            z: 0,
+        };
+        assert!(player.step(&c, 0.1, 0.1));
+        assert!(player.x > 1.0);
+        assert!(player.y < 1.0);
+    }
+
     #[test]
     fn solid_square_blocks() {
         let mut c = Collision::default();

@@ -1,5 +1,8 @@
 //! Window-free scene: turns real cells into sprite instances (world-pixel rects + atlas UVs) and a collision grid.
-use crate::sim::{Collision, BLOCK, EDGE_N, EDGE_W};
+use crate::sim::{
+    Collision, BLOCK, EDGE_N, EDGE_W, HOPPABLE, SOLID, SOLID_TRANS, WATER, WINDOW, WINDOW_N,
+    WINDOW_W,
+};
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
 use std::path::Path;
@@ -35,6 +38,46 @@ pub struct Scene {
 pub const TILE_W: i32 = 128;
 pub const TILE_H: i32 = 64;
 pub const LEVEL_PX: i32 = 192;
+
+/// zombie.iso.IsoGridSquare.CalculateCollide: collect the measured static square flags.
+/// Doors, windows, stairs and dynamic objects still need their own collision rules.
+fn tile_collision_flags(defs: &TileDefs, name: &str) -> u16 {
+    let mut flags = 0;
+    if defs.has(name, "solid") || defs.has(name, "solidtrans") {
+        flags |= BLOCK;
+    }
+    if defs.has(name, "solid") {
+        flags |= SOLID;
+    }
+    if defs.has(name, "solidtrans") {
+        flags |= SOLID_TRANS;
+    }
+    if defs.has(name, "water") {
+        flags |= WATER;
+    }
+    if ["windowN", "windowW", "WindowN", "WindowW"]
+        .iter()
+        .any(|prop| defs.has(name, prop))
+    {
+        flags |= WINDOW;
+    }
+    if defs.has(name, "windowN") || defs.has(name, "WindowN") {
+        flags |= WINDOW_N;
+    }
+    if defs.has(name, "windowW") || defs.has(name, "WindowW") {
+        flags |= WINDOW_W;
+    }
+    if defs.has(name, "HoppableN") || defs.has(name, "HoppableW") {
+        flags |= HOPPABLE;
+    }
+    if defs.has(name, "collideN") {
+        flags |= EDGE_N;
+    }
+    if defs.has(name, "collideW") {
+        flags |= EDGE_W;
+    }
+    flags
+}
 
 /// Isometric world-pixel position of the top vertex of tile (gx, gy) on level z.
 pub fn iso(gx: f32, gy: f32, z: i32) -> [f32; 2] {
@@ -162,16 +205,7 @@ pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Sc
                 let (px, py) = (p[0] as i32, p[1] as i32);
                 for &t in &sq.tiles {
                     let nm = &cell.names[t as usize];
-                    let mut fl = 0u8;
-                    if defs.has(nm, "solid") || defs.has(nm, "solidtrans") {
-                        fl |= BLOCK;
-                    }
-                    if defs.has(nm, "WallN") || defs.has(nm, "collideN") {
-                        fl |= EDGE_N;
-                    }
-                    if defs.has(nm, "WallW") || defs.has(nm, "collideW") {
-                        fl |= EDGE_W;
-                    }
+                    let fl = tile_collision_flags(&defs, nm);
                     if fl != 0 {
                         collision.add(gx, gy, z, fl);
                     }
@@ -342,5 +376,379 @@ impl Scene {
         self.level_ranges = starts;
         self.clear = [0.0, 0.0, 0.0];
         Some(rid)
+    }
+}
+
+#[cfg(test)]
+mod collision_oracle_tests {
+    use super::*;
+    use zomboid_content::tiledefs::Props;
+
+    #[test]
+    #[ignore = "real-content acceptance: loads a complete cell and texture atlas"]
+    fn real_water_square_is_wired_into_loaded_scene() -> anyhow::Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let cell = read_cell(&root, 0, 18)?.ok_or_else(|| anyhow!("cell 0_18 missing"))?;
+        let water_id =
+            cell.names
+                .iter()
+                .position(|name| name == "blends_natural_02_0")
+                .ok_or_else(|| anyhow!("water tile missing from cell header"))? as i32;
+        let mut found = None;
+        'outer: for sx in 1..255 {
+            for sy in 1..255 {
+                let chunk = &cell.chunks[((sx / 8) * 32 + sy / 8) as usize];
+                let Some(square) =
+                    &chunk.levels[(0 - cell.min_level) as usize][((sx % 8) * 8 + sy % 8) as usize]
+                else {
+                    continue;
+                };
+                if square.tiles.contains(&water_id) {
+                    found = Some((sx, 18 * 256 + sy));
+                    break 'outer;
+                }
+            }
+        }
+        let (x, y) = found.ok_or_else(|| anyhow!("water tile not used on z=0"))?;
+        let scene = load_region(&root, 0, 18, 0, 18)?;
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            assert!(
+                !scene.collision.can_step((x, y), (x + dx, y + dy), 0),
+                "water source at {x},{y}, direction {dx},{dy}"
+            );
+        }
+        println!("real water square: {x},{y},0");
+        Ok(())
+    }
+
+    #[test]
+    fn real_water_tile_uses_original_measured_collision_flags() -> anyhow::Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let defs = TileDefs::load(&root)?;
+        // The installed newtiledefinitions.tiles.txt declares these three
+        // properties together. WaterProbe records blocked entry and exit.
+        let tile = "blends_natural_02_0";
+        for prop in ["water", "solidtrans", "solidfloor"] {
+            assert!(defs.has(tile, prop), "{tile} missing {prop}");
+        }
+        let mut c = Collision::default();
+        c.add(1, 0, 0, tile_collision_flags(&defs, tile));
+        assert!(!c.can_step((0, 0), (1, 0), 0));
+        assert!(!c.can_step((1, 0), (0, 0), 0));
+        Ok(())
+    }
+
+    #[test]
+    fn water_solidtrans_window_destination_blocks_entry() {
+        // WaterWindowProbe: eastward cases 48 and 56 differ only by water.
+        let line = include_str!("../../../tests/golden/collision_water_window.txt")
+            .lines()
+            .next()
+            .expect("east oracle");
+        let (direction, bits) = line.split_once(':').expect("oracle line");
+        assert_eq!(direction, "1,0");
+        let mut defs = TileDefs::default();
+        for name in ["water", "solidtrans", "windowN"] {
+            defs.tiles
+                .insert(name.into(), Props::from([(name.into(), String::new())]));
+        }
+        for mask in [48usize, 56] {
+            let mut c = Collision::default();
+            for (bit, name) in ["water", "solidtrans", "windowN"].iter().enumerate() {
+                if mask & (1 << (bit + 3)) != 0 {
+                    c.add(1, 0, 0, tile_collision_flags(&defs, name));
+                }
+            }
+            assert_eq!(
+                !c.can_step((0, 0), (1, 0), 0),
+                bits.as_bytes()[mask] == b'1'
+            );
+        }
+    }
+
+    #[test]
+    fn water_and_window_on_both_squares_match_original() {
+        let names = ["water", "solidtrans", "windowN"];
+        let mut defs = TileDefs::default();
+        for name in names {
+            defs.tiles
+                .insert(name.into(), Props::from([(name.into(), String::new())]));
+        }
+        let mut count = 0;
+        for line in include_str!("../../../tests/golden/collision_water_window.txt").lines() {
+            let (direction, bits) = line.split_once(':').expect("oracle line");
+            let (dx, dy) = direction.split_once(',').expect("direction");
+            let to = (
+                dx.parse::<i32>().expect("dx"),
+                dy.parse::<i32>().expect("dy"),
+            );
+            assert_eq!(bits.len(), 64);
+            for (mask, expected) in bits.bytes().enumerate() {
+                let mut c = Collision::default();
+                for (square, shift) in [((0, 0), 0), (to, 3)] {
+                    for (bit, name) in names.iter().enumerate() {
+                        if mask & (1 << (shift + bit)) != 0 {
+                            c.add(square.0, square.1, 0, tile_collision_flags(&defs, name));
+                        }
+                    }
+                }
+                assert_eq!(
+                    !c.can_step((0, 0), to, 0),
+                    expected == b'1',
+                    "{direction} mask {mask}"
+                );
+                count += 1;
+            }
+        }
+        assert_eq!(count, 256);
+    }
+
+    #[test]
+    fn adjacent_window_and_hoppable_flags_match_original() {
+        let names = [
+            "solidtrans",
+            "windowN",
+            "windowW",
+            "WindowN",
+            "WindowW",
+            "HoppableN",
+            "HoppableW",
+        ];
+        let mut defs = TileDefs::default();
+        for name in names {
+            defs.tiles
+                .insert(name.into(), Props::from([(name.into(), String::new())]));
+        }
+        let mut count = 0;
+        for line in include_str!("../../../tests/golden/collision_adjacent_window.txt").lines() {
+            let (input, expected) = line.split_once(':').expect("oracle line");
+            let values: Vec<i32> = input
+                .split(',')
+                .map(|s| s.parse().expect("oracle integer"))
+                .collect();
+            assert_eq!(values.len(), 3);
+            let (x, y, mask) = (values[0], values[1], values[2]);
+            let mut c = Collision::default();
+            c.add(0, 0, 0, tile_collision_flags(&defs, "solidtrans"));
+            for (bit, name) in names.iter().enumerate() {
+                if mask & (1 << bit) != 0 {
+                    c.add(x, y, 0, tile_collision_flags(&defs, name));
+                }
+            }
+            assert_eq!(!c.can_step((-1, 0), (0, 0), 0), expected == "1", "{input}");
+            count += 1;
+        }
+        assert_eq!(count, 1152);
+    }
+
+    #[test]
+    fn adjacent_window_flags_match_original_all_directions() {
+        let names = [
+            "solidtrans",
+            "windowN",
+            "windowW",
+            "WindowN",
+            "WindowW",
+            "HoppableN",
+            "HoppableW",
+        ];
+        let mut defs = TileDefs::default();
+        for name in names {
+            defs.tiles
+                .insert(name.into(), Props::from([(name.into(), String::new())]));
+        }
+        let mut count = 0;
+        for line in
+            include_str!("../../../tests/golden/collision_adjacent_window_directions.txt").lines()
+        {
+            let (input, expected) = line.split_once(':').expect("oracle line");
+            let values: Vec<i32> = input
+                .split(',')
+                .map(|s| s.parse().expect("oracle integer"))
+                .collect();
+            assert_eq!(values.len(), 5);
+            let (sx, sy, x, y, mask) = (values[0], values[1], values[2], values[3], values[4]);
+            let mut c = Collision::default();
+            c.add(0, 0, 0, tile_collision_flags(&defs, "solidtrans"));
+            for (bit, name) in names.iter().enumerate() {
+                if mask & (1 << bit) != 0 {
+                    c.add(x, y, 0, tile_collision_flags(&defs, name));
+                }
+            }
+            assert_eq!(!c.can_step((sx, sy), (0, 0), 0), expected == "1", "{input}");
+            count += 1;
+        }
+        assert_eq!(count, 9216);
+    }
+
+    #[test]
+    fn window_and_solidtrans_match_original_square_cases() {
+        let names = [
+            "solidtrans",
+            "windowN",
+            "windowW",
+            "WindowN",
+            "WindowW",
+            "collideN",
+            "collideW",
+            "transparentN",
+            "transparentW",
+        ];
+        let mut defs = TileDefs::default();
+        for name in names {
+            defs.tiles
+                .insert(name.into(), Props::from([(name.into(), String::new())]));
+        }
+        let mut checked = 0;
+        for line in include_str!("../../../tests/golden/collision_window_solid.txt").lines() {
+            let (direction, bits) = line.split_once(':').expect("oracle line");
+            let (dx, dy) = direction.split_once(',').expect("oracle direction");
+            let to = (
+                dx.parse::<i32>().expect("dx"),
+                dy.parse::<i32>().expect("dy"),
+            );
+            assert_eq!(bits.len(), 512);
+            for (mask, expected) in bits.bytes().enumerate() {
+                let mut collision = Collision::default();
+                for (bit, name) in names.iter().enumerate() {
+                    if mask & (1 << bit) != 0 {
+                        collision.add(to.0, to.1, 0, tile_collision_flags(&defs, name));
+                    }
+                }
+                assert_eq!(
+                    !collision.can_step((0, 0), to, 0),
+                    expected == b'1',
+                    "direction={direction} mask={mask}"
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 4096);
+    }
+
+    #[test]
+    fn mixed_solid_and_window_flags_match_original_square_cases() {
+        let names = [
+            "solid",
+            "solidtrans",
+            "windowN",
+            "windowW",
+            "WindowN",
+            "WindowW",
+            "collideN",
+            "collideW",
+            "transparentN",
+            "transparentW",
+        ];
+        let mut defs = TileDefs::default();
+        for name in names {
+            defs.tiles
+                .insert(name.into(), Props::from([(name.into(), String::new())]));
+        }
+        let mut checked = 0;
+        for line in include_str!("../../../tests/golden/collision_mixed_solid_window.txt").lines() {
+            let (direction, bits) = line.split_once(':').expect("oracle line");
+            let (dx, dy) = direction.split_once(',').expect("oracle direction");
+            let to = (
+                dx.parse::<i32>().expect("dx"),
+                dy.parse::<i32>().expect("dy"),
+            );
+            assert_eq!(bits.len(), 1024);
+            for (mask, expected) in bits.bytes().enumerate() {
+                let mut collision = Collision::default();
+                for (bit, name) in names.iter().enumerate() {
+                    if mask & (1 << bit) != 0 {
+                        collision.add(to.0, to.1, 0, tile_collision_flags(&defs, name));
+                    }
+                }
+                assert_eq!(
+                    !collision.can_step((0, 0), to, 0),
+                    expected == b'1',
+                    "direction={direction} mask={mask}"
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 8192);
+    }
+
+    #[test]
+    fn water_and_solidtrans_match_original_cardinal_samples() {
+        // The original-side fixture uses water, solidtrans and solidfloor on
+        // the source and destination; model each property as a separate tile.
+        let mut defs = TileDefs::default();
+        for name in ["water", "solidtrans", "solidfloor"] {
+            defs.tiles
+                .insert(name.into(), Props::from([(name.into(), String::new())]));
+        }
+        let mut checked = 0;
+        for line in include_str!("../../../tests/golden/collision_water.txt").lines() {
+            let (direction, bits) = line.split_once(':').expect("oracle line");
+            let (dx, dy) = direction.split_once(',').expect("oracle direction");
+            let to = (
+                dx.parse::<i32>().expect("dx"),
+                dy.parse::<i32>().expect("dy"),
+            );
+            assert_eq!(bits.len(), 64);
+            for (mask, expected) in bits.bytes().enumerate() {
+                let mut collision = Collision::default();
+                for (square, shift) in [((0, 0), 0), (to, 3)] {
+                    for (bit, name) in ["water", "solidtrans", "solidfloor"]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        if mask & (1 << (shift + bit)) != 0 {
+                            collision.add(square.0, square.1, 0, tile_collision_flags(&defs, name));
+                        }
+                    }
+                }
+                assert_eq!(
+                    !collision.can_step((0, 0), to, 0),
+                    expected == b'1',
+                    "direction={direction} mask={mask}"
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, 256);
+    }
+
+    #[test]
+    fn static_square_flags_match_original_adjacent_samples() {
+        // Expected blocked states came from tests/original_probe/CollisionProbe.java.
+        // Each pair is forward/reverse, with the flags on the eastern or southern square.
+        type Case = (&'static [&'static str], (bool, bool), (bool, bool));
+        let cases: &[Case] = &[
+            (&[], (false, false), (false, false)),
+            (&["solid"], (true, false), (true, false)),
+            (&["solidtrans"], (true, false), (true, false)),
+            (&["collideW"], (true, true), (false, false)),
+            (&["collideN"], (false, false), (true, true)),
+            (&["WallW"], (false, false), (false, false)),
+            (&["WallN"], (false, false), (false, false)),
+            (&["doorW"], (false, false), (false, false)),
+            (&["windowW"], (false, false), (false, false)),
+            (&["collideW", "doorW"], (true, true), (false, false)),
+            (&["collideW", "windowW"], (true, true), (false, false)),
+            (&["WallW", "collideW"], (true, true), (false, false)),
+            (&["WallN", "collideN"], (false, false), (true, true)),
+        ];
+        for (properties, east, south) in cases {
+            let mut defs = TileDefs::default();
+            let props: Props = properties
+                .iter()
+                .map(|p| (p.to_string(), String::new()))
+                .collect();
+            defs.tiles.insert("probe".into(), props);
+            for (to, expected) in [((1, 0), east), ((0, 1), south)] {
+                let mut collision = Collision::default();
+                collision.add(to.0, to.1, 0, tile_collision_flags(&defs, "probe"));
+                let result = (
+                    !collision.can_step((0, 0), to, 0),
+                    !collision.can_step(to, (0, 0), 0),
+                );
+                assert_eq!(result, *expected, "properties={properties:?}, to={to:?}");
+            }
+        }
     }
 }

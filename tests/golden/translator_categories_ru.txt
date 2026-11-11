@@ -1,0 +1,14 @@
+PROBE text:title=title
+PROBE nullable:title=null
+PROBE text:Base.CannedCarrotsOpen=Base.CannedCarrotsOpen
+PROBE nullable:Base.CannedCarrotsOpen=null
+PROBE item:Base.CannedCarrotsOpen=Консервы - Морковь (открытое)
+PROBE evolved:Base.CannedCarrotsOpen=null
+PROBE text:Base.Axe=Base.Axe
+PROBE nullable:Base.Axe=null
+PROBE item:Base.Axe=Пожарный топор
+PROBE evolved:Base.Axe=null
+PROBE text:Base.MissingProbe=Base.MissingProbe
+PROBE nullable:Base.MissingProbe=null
+PROBE item:Base.MissingProbe=Base.MissingProbe
+PROBE evolved:Base.MissingProbe=null

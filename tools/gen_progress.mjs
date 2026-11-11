@@ -31,14 +31,17 @@ const d1 = diff("screenshots/game_clean2.png", "screenshots/port_lit_room.png");
 const d2 = diff("screenshots/game_s3_moved_S.png", "screenshots/port_s3.png");
 const d0 = diff("screenshots/game_clean2.png", "screenshots/port_z0_aligned.png");
 
-const golden = fs.readFileSync(path.join(repo, "tests/golden/lua_real/client_lua_warnings.txt"), "utf8").split("\n").filter(Boolean).length;
-let parityKinds = 0;
-try {
-  const out = execFileSync("sh", ["tests/lua_require_parity.sh"], { cwd: repo, encoding: "utf8" });
-  parityKinds = +(out.match(/IDENTICAL \((\d+) kinds\)/)?.[1] ?? 0);
-} catch {}
+// Same filtered, sorted multiset as tests/lua_require_parity.sh, without requiring
+// a Unix shell. A mismatch is an error, never silently reported as zero matches.
+const warningLines = (text) => text.split(/\r?\n/).filter((s) => /require|can.t find map objects|Mannequin zone/.test(s)).map((s) => s.trimStart()).sort();
+const expected = warningLines(fs.readFileSync(path.join(repo, "tests/golden/lua_real/client_lua_warnings.txt"), "utf8"));
+const actual = warningLines(lua);
+if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error("Lua warning oracle differs; progress not written");
+const golden = expected.length, parityKinds = actual.length;
 
-const tests = execFileSync("cargo", ["test", "--release", "--workspace"], { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+// Launcher has a separate Windows shader build prerequisite; do not imply it
+// was tested when only the four core crates have been checked.
+const tests = execFileSync("cargo", ["test", "--release", "-p", "zomboid-lua", "-p", "zomboid-content", "-p", "zomboid-client", "-p", "zomboid-ctl"], { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 const passed = [...tests.matchAll(/test result: ok\. (\d+) passed/g)].reduce((s, x) => s + +x[1], 0);
 
 const FAMILIES = [
@@ -49,21 +52,21 @@ const FAMILIES = [
 ];
 // ---- areas: score 0..1, weight. Score formulas are written next to each area. ----
 const areas = [
-  { id: "formats", name: "Reading the game's files", weight: 15, measured: true,
+  { id: "formats", name: "Reading the game's files", weight: 15, measured: false,
     score: FAMILIES.filter((f) => f[1]).length / FAMILIES.length,
     how: "share of the game's format families we read (list below); coverage inside each family is also incomplete",
     facts: [`format families read: ${FAMILIES.filter((f) => f[1]).length} of ${FAMILIES.length}`, `cell header parsed: ${headerParsed} of ${headerTotal} bytes`, `tile names resolved: ${tilesUsed - tilesMissing} of ${tilesUsed}`, `Muldraugh map zones: ${zones}`, "not read: " + FAMILIES.filter((f) => !f[1]).map((f) => f[0]).join(", ")] },
-  { id: "lua", name: "The game's Lua scripts run", weight: 20, measured: true,
+  { id: "lua", name: "The game's Lua scripts run", weight: 20, measured: false,
     score: pct(luaOk, luaAll) / 100 * 0.2,
     how: "Lua files that execute without error, counted as 20% of the area weight (running is not the same as correct); the rest is the real Java API, which barely exists yet (author estimate: ~0)",
-    facts: [`Lua files without error: ${luaOk} of ${luaAll}`, `undefined Java names the Lua touches: ${globals}`, `real-client log line kinds reproduced: ${parityKinds}`] },
-  { id: "render", name: "World rendering", weight: 20, measured: true,
+    facts: [`Lua files without error under stubs: ${luaOk} of ${luaAll}`, `undefined Java names the Lua touches: ${globals}`, `selected real-client log lines reproduced: ${parityKinds} of ${golden}`, "numeric literals, translation formatting, RU fallback and item-name lookup checked against selected original Java cases"] },
+  { id: "render", name: "World rendering", weight: 20, measured: false,
     score: Math.max(0, 1 - d1 / 60) * 0.5,
     how: "frame similarity to the game, 1 - (diff/60), times 0.5: lighting, characters, weather and animation are not there yet",
-    facts: [`frame 1 difference from the game: ${d1} of 255`, `frame 2 (held-out) difference: ${d2} of 255`, `before the visibility mask: ${d0} of 255`] },
+    facts: [`frame 1 difference from the game: ${d1} of 255`, `frame 2 difference: ${d2} of 255 (lighting factor was also checked on this frame)`, `before the visibility mask: ${d0} of 255`] },
   { id: "sim", name: "Gameplay and zombies", weight: 25, measured: false, score: 0.03,
     how: "author estimate: a 30 Hz step, movement and collision exist in simplified form; zombies are placeholders with invented parameters",
-    facts: ["player movement and collision (simplified)", "zombies: placeholder", "inventory, crafting, skills, health: none"] },
+    facts: ["26 cardinal, 32,768 diagonal, 256 water, 256 water-window, 4,096 window-flag, 8,192 mixed-solid and 9,216 adjacent-window static cases checked against the original", "a real water square at (1, 4803, 0) checked through loaded scene collision; no original walk trace", "continuous player movement, sliding, doors, window objects and stairs: incomplete", "zombies: placeholder", "inventory, crafting, skills, health: none"] },
   { id: "saves", name: "Saves", weight: 5, measured: false, score: 0.1,
     how: "author estimate: the player position is read from players.db; nothing else",
     facts: ["player position is read from a real save", "time of day from map_t.bin is not decoded"] },
@@ -79,7 +82,7 @@ const out = {
   generated: new Date().toISOString().slice(0, 10),
   game: "Project Zomboid 42.21.0 (Steam build 25485521)",
   overall,
-  note: "The overall percentage is a weighted estimate. Measured areas are computed by commands (see how/facts); the rest are author estimates, marked measured:false.",
+  note: "Overall and area percentages are subjective weighted estimates, not measured game parity. Facts list the limited measured cases. Full compatibility is unknown.",
   areas,
   numbers: { luaOk, luaAll, globals, tilesUsed, tilesMissing, headerParsed, headerTotal, zones: +zones, frameDiff1: d1, frameDiff2: d2, frameDiffBeforeMask: d0, logKindsMatched: parityKinds, goldenLogLines: golden, testsPassed: passed },
 };

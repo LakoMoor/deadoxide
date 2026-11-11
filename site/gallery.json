@@ -10,11 +10,11 @@
     },
     {
       "id": "moved",
-      "title": "Character moved (held-out frame)",
+      "title": "Character moved (second frame)",
       "game": "assets/gallery/game_s3_moved_S.png",
       "port": "assets/gallery/port_s3.png",
       "diff": 26.09,
-      "caption": "A second oracle: the character walked a few tiles, position read from the save. The camera and the wall cutaway rule were checked on this frame without tuning; the ambient factor was chosen on frame 1 and confirmed here by a sweep (27.1 to 26.1). Most of the remaining difference is lighting."
+      "caption": "A second oracle: the character walked a few tiles, position read from the save. The ambient factor was chosen on frame 1 and checked here by a sweep (27.1 to 26.1), so this is not a fully held-out lighting test. Lighting and visibility differences remain."
     },
     {
       "id": "p1",
@@ -34,6 +34,16 @@
     }
   ],
   "portOnly": [
+    {
+      "src": "assets/gallery/port_real_water_2026-11-11.png",
+      "title": "Water square in cell 0_18",
+      "caption": "Rust client at x=1, y=4803, z=0, zoom 1; the red block is a placeholder. This is the edge of the loaded cell. No original screenshot or movement trace is available for this location."
+    },
+    {
+      "src": "assets/gallery/port_adjacent_2026-11-11.png",
+      "title": "Current Rust client, Rosewood spawn",
+      "caption": "Headless render after the adjacent-window collision update, x=8303.5, y=11689.5, z=0, zoom 1.0; the red marker is a placeholder player. Captured 2026-11-11 with experimental room visibility and lighting. This still image does not test movement or window interaction."
+    },
     {
       "src": "assets/gallery/port_gpu_cell41_39.png",
       "title": "Cell 41_39, GPU rendering",
