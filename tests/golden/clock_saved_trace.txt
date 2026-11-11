@@ -1,0 +1,1 @@
+SAVE ticks=100 bits=413706a4 year=1993 month_index=6 day_index=8

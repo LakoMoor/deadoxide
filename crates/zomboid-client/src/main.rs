@@ -537,6 +537,8 @@ fn main() -> anyhow::Result<()> {
         .position(|s| s == "--save")
         .map(|j| load_saved_player(&a[j + 1]))
         .transpose()?;
+    let mut saved_time = None;
+    let mut saved_day = None;
     if let Some(j) = a.iter().position(|s| s == "--save") {
         let save_path = std::path::Path::new(&a[j + 1]);
         let folder = if save_path.is_dir() {
@@ -549,17 +551,29 @@ fn main() -> anyhow::Result<()> {
             .filter(|p| p.is_file())
         {
             match zomboid_content::sandbox::load_day_length(&path) {
-                Ok(day) => println!(
-                    "save day length: {} minutes (option {}, not applied to simulation)",
-                    day.minutes, day.option
-                ),
+                Ok(day) => {
+                    println!(
+                        "save day length: {} minutes (option {})",
+                        day.minutes, day.option
+                    );
+                    saved_day = Some(day);
+                }
                 Err(e) => eprintln!("save day length unavailable: {e}"),
             }
         }
         if let Some(path) = folder.map(|p| p.join("map_t.bin")).filter(|p| p.is_file()) {
             match zomboid_content::save::load_game_time(&path) {
-                Ok(t) => println!("save time: {:02}:{:02}, year {}, month index {}, day index {} (not applied to simulation)",
-                    t.hour(), t.minutes(), t.year, t.month_index, t.day_index),
+                Ok(t) => {
+                    println!(
+                        "save time: {:02}:{:02}, year {}, month index {}, day index {}",
+                        t.hour(),
+                        t.minutes(),
+                        t.year,
+                        t.month_index,
+                        t.day_index
+                    );
+                    saved_time = Some(t);
+                }
                 Err(e) => eprintln!("save time unavailable: {e}"),
             }
         }
@@ -701,7 +715,36 @@ fn main() -> anyhow::Result<()> {
         }
         None => spawn(&scene, gx, gy),
     };
-    let world = World::new(1, player, &scene.collision, 40, 20);
+    let mut world = World::new(1, player, &scene.collision, 40, 20);
+    if let (Some(time), Some(day)) = (&saved_time, &saved_day) {
+        world.clock = sim::GameClock::from_save(time, day);
+        if world.clock.is_some() {
+            println!("clock: experimental normal speed; game events, weather and speed controls not implemented");
+        } else {
+            eprintln!("save clock unavailable: unsupported date");
+        }
+    }
+    if let Some(i) = a.iter().position(|s| s == "--headless-ticks") {
+        let ticks: u32 = a
+            .get(i + 1)
+            .ok_or_else(|| anyhow::anyhow!("--headless-ticks requires a count"))?
+            .parse()?;
+        for _ in 0..ticks {
+            world.step(&scene.collision, (0.0, 0.0));
+        }
+        if let Some(clock) = &world.clock {
+            println!(
+                "clock after {ticks} ticks: bits={:08x} year={} month_index={} day_index={}",
+                clock.time.to_bits(),
+                clock.year,
+                clock.month,
+                clock.day
+            );
+        } else {
+            println!("clock after {ticks} ticks: unavailable (save time and sandbox day length required)");
+        }
+        return Ok(());
+    }
     println!(
         "world: seed 1, {} placeholder zombies, tick {} Hz",
         world.zombies.len(),

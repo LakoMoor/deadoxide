@@ -314,12 +314,82 @@ pub mod iso_zombie_constants {
 }
 
 /// zombie.GameTime.update: numeric time increment for an unpaused normal-mode update.
-/// This does not run calendar, event, weather, pause or time-speed rules and is not yet
-/// wired to World; `effective_multiplier` must come from the original-equivalent runtime.
-#[allow(dead_code)]
+/// This arithmetic alone does not run calendar, events, weather, pause or speed rules.
 pub fn measured_clock_step(time: f32, minutes_per_day: f32, effective_multiplier: f32) -> f32 {
     let delta = (1.0_f32 / minutes_per_day / 60.0 * effective_multiplier) / 2.0;
     time + delta
+}
+
+/// Partial clock for normal single-player fixed-step operation. Events, weather and
+/// original pause/fast-forward controls are not yet connected.
+#[derive(Clone, Debug)]
+pub struct GameClock {
+    pub time: f32,
+    pub year: i32,
+    pub month: u8,
+    pub day: u8,
+    pub minutes_per_day: f32,
+    pub effective_multiplier: f32,
+}
+
+impl GameClock {
+    /// zombie.GameTime.advanceOneDay: days per zero-based month in the Gregorian calendar.
+    fn days_in_month(year: i32, month: u8) -> Option<u8> {
+        match month {
+            0 | 2 | 4 | 6 | 7 | 9 | 11 => Some(31),
+            3 | 5 | 8 | 10 => Some(30),
+            1 => Some(if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+                29
+            } else {
+                28
+            }),
+            _ => None,
+        }
+    }
+
+    /// zombie.GameTime.update: measured normal-mode clock and midnight date increment.
+    pub fn advance(&mut self, paused: bool) {
+        if paused {
+            return;
+        }
+        self.time = measured_clock_step(self.time, self.minutes_per_day, self.effective_multiplier);
+        if self.time >= 24.0 {
+            self.time -= 24.0;
+            self.day += 1;
+            if self.day >= Self::days_in_month(self.year, self.month).unwrap_or(31) {
+                self.day = 0;
+                self.month += 1;
+                if self.month == 12 {
+                    self.month = 0;
+                    self.year += 1;
+                }
+            }
+        }
+    }
+
+    pub fn from_save(
+        time: &zomboid_content::save::SavedGameTime,
+        day: &zomboid_content::sandbox::SavedDayLength,
+    ) -> Option<Self> {
+        if !(1..=9998).contains(&time.year) {
+            return None;
+        }
+        let month = u8::try_from(time.month_index).ok()?;
+        let date = u8::try_from(time.day_index).ok()?;
+        if date >= Self::days_in_month(time.year, month)? {
+            return None;
+        }
+        Some(Self {
+            time: time.time_of_day,
+            year: time.year,
+            month,
+            day: date,
+            minutes_per_day: day.minutes as f32,
+            // Controlled original trace: normal multiplier 1, fpsMultiplier 2 for 30 Hz.
+            // Player sleep, UI speed, server and debug multipliers remain unimplemented.
+            effective_multiplier: 1.6,
+        })
+    }
 }
 
 pub const TICK_HZ: f32 = 30.0;
@@ -356,6 +426,7 @@ pub struct World {
     pub rng: Rng,
     pub player: Player,
     pub zombies: Vec<Zombie>,
+    pub clock: Option<GameClock>,
 }
 
 impl World {
@@ -381,6 +452,7 @@ impl World {
             rng,
             player,
             zombies,
+            clock: None,
         }
     }
 
@@ -418,6 +490,9 @@ impl World {
             z.x = zp.x;
             z.y = zp.y;
         }
+        if let Some(clock) = &mut self.clock {
+            clock.advance(false);
+        }
         self.tick += 1;
     }
 
@@ -434,6 +509,12 @@ impl World {
         mix(self.tick);
         mix(self.player.x.to_bits() as u64);
         mix(self.player.y.to_bits() as u64);
+        if let Some(clock) = &self.clock {
+            mix(clock.time.to_bits() as u64);
+            mix(clock.year as u64);
+            mix(clock.month as u64);
+            mix(clock.day as u64);
+        }
         for z in &self.zombies {
             mix(z.x.to_bits() as u64);
             mix(z.y.to_bits() as u64);
@@ -469,6 +550,140 @@ mod world_tests {
         }
         (w.state_hash(), w)
     }
+    #[test]
+    fn saved_clock_rejects_invalid_calendar_date() {
+        let mut saved = zomboid_content::save::SavedGameTime {
+            version: 249,
+            time_of_day: 11.0,
+            year: 1993,
+            month_index: 1,
+            day_index: 27,
+        };
+        let day = zomboid_content::sandbox::SavedDayLength {
+            option: 4,
+            minutes: 90,
+        };
+        let clock = GameClock::from_save(&saved, &day).expect("valid date");
+        assert_eq!(
+            (clock.year, clock.month, clock.day, clock.minutes_per_day),
+            (1993, 1, 27, 90.0)
+        );
+        saved.day_index = 28;
+        assert!(GameClock::from_save(&saved, &day).is_none());
+        saved.year = 1996;
+        assert!(GameClock::from_save(&saved, &day).is_some());
+        saved.month_index = 12;
+        assert!(GameClock::from_save(&saved, &day).is_none());
+    }
+
+    #[test]
+    fn world_clock_matches_fixed_30hz_original_traces() {
+        let mut count = 0;
+        for line in include_str!("../../../tests/golden/clock_fixed30.txt").lines() {
+            let (head, rest) = line.split_once(" actual=").expect("header");
+            let day: f32 = head.strip_prefix("CASE ").expect("case").parse().unwrap();
+            let (multiplier, frames) = rest.split_once(" start=").expect("fields");
+            let multiplier = f32::from_bits(u32::from_str_radix(multiplier, 16).unwrap());
+            let frames: Vec<_> = frames
+                .split(',')
+                .map(|s| u32::from_str_radix(s, 16).unwrap())
+                .collect();
+            assert_eq!(frames.len(), 4);
+            let collision = Collision::default();
+            let mut world = World::new(
+                1,
+                Player {
+                    x: 0.5,
+                    y: 0.5,
+                    z: 0,
+                },
+                &collision,
+                0,
+                0,
+            );
+            world.clock = Some(GameClock {
+                time: f32::from_bits(frames[0]),
+                year: 1993,
+                month: 6,
+                day: 8,
+                minutes_per_day: day,
+                effective_multiplier: multiplier,
+            });
+            for step in 1..=100 {
+                world.step(&collision, (0.0, 0.0));
+                if let Some(index) = match step {
+                    1 => Some(1),
+                    30 => Some(2),
+                    100 => Some(3),
+                    _ => None,
+                } {
+                    assert_eq!(
+                        world.clock.as_ref().unwrap().time.to_bits(),
+                        frames[index],
+                        "{line}, tick {step}"
+                    );
+                }
+            }
+            count += 1;
+        }
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn clock_midnight_and_pause_match_original_samples() {
+        let mut count = 0;
+        for line in include_str!("../../../tests/golden/clock_boundaries.txt").lines() {
+            let (date, expected) = line.strip_prefix("DATE ").unwrap().split_once('=').unwrap();
+            let date: Vec<i32> = date.split(',').map(|s| s.parse().unwrap()).collect();
+            let fields: Vec<_> = expected.split(',').collect();
+            assert_eq!((date.len(), fields.len()), (3, 4));
+            let mut clock = GameClock {
+                time: 23.99998,
+                year: date[0],
+                month: date[1] as u8,
+                day: date[2] as u8,
+                minutes_per_day: 90.0,
+                effective_multiplier: 0.8,
+            };
+            clock.advance(false);
+            assert_eq!(
+                clock.time.to_bits(),
+                u32::from_str_radix(fields[0], 16).unwrap(),
+                "{line}"
+            );
+            assert_eq!(
+                (clock.year, clock.month, clock.day),
+                (
+                    fields[1].parse().unwrap(),
+                    fields[2].parse().unwrap(),
+                    fields[3].parse().unwrap()
+                ),
+                "{line}"
+            );
+            count += 1;
+        }
+        assert_eq!(count, 7);
+        let pause = include_str!("../../../tests/golden/clock_pause.txt").trim();
+        let (before, after) = pause
+            .strip_prefix("PAUSE true=")
+            .unwrap()
+            .split_once(',')
+            .unwrap();
+        let mut clock = GameClock {
+            time: f32::from_bits(u32::from_str_radix(before, 16).unwrap()),
+            year: 1993,
+            month: 6,
+            day: 8,
+            minutes_per_day: 30.0,
+            effective_multiplier: 0.8,
+        };
+        clock.advance(true);
+        assert_eq!(
+            clock.time.to_bits(),
+            u32::from_str_radix(after, 16).unwrap()
+        );
+    }
+
     #[test]
     fn numeric_clock_step_matches_original_short_traces() {
         let mut cases = 0;

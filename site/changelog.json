@@ -29,7 +29,8 @@
         "Saved-player position and floor now initialize the window and offscreen screenshot; other saved world state remains unsupported",
         "Version 249 save time and date fields are readable and checked against original GameTime.load; simulation and lighting do not yet use them",
         "Save loading now reads committed SQLite WAL changes instead of copying the database file alone; a synthetic live-writer regression checks the position",
-        "Saved sandbox day length is read for version 249; controlled clock arithmetic matches selected original traces but is not yet wired to gameplay"
+        "Saved sandbox day length is read for version 249; controlled clock arithmetic matches selected original traces but is not yet wired to gameplay",
+        "Saved time and day length now initialize a partial fixed-step world clock; selected original 30 Hz traces and midnight dates match, while clock events and weather remain unimplemented"
       ]
     },
     {

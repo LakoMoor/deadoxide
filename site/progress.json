@@ -74,7 +74,7 @@
       "how": "author estimate: player position and selected time fields are read; most save state and writing are missing",
       "facts": [
         "player position and floor drive window and offscreen camera; a synthetic live-WAL test verifies committed player coordinates",
-        "version 249 save time/date and sandbox day length are read and checked against the original; clock events, save writing and changed world data remain unimplemented"
+        "saved time and day length initialize a partial World clock; a controlled 100-tick trace matches the original, while clock events and save writing remain unimplemented"
       ],
       "percent": 10
     },
@@ -130,6 +130,6 @@
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
     "goldenLogLines": 22,
-    "testsPassed": 49
+    "testsPassed": 52
   }
 }
