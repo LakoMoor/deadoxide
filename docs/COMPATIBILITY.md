@@ -206,13 +206,12 @@ The client `--save` now initializes the camera and rendered level from the saved
 `zomboid-content::save::load_player` reads `localPlayers` of a save's `players.db` (SQLite, read-only; rusqlite bundled): id, name, x, y, z, isDead.
 `zomboid-client --save <save folder|players.db>` (or `.\play.cmd save`) reads it from a temp copy, picks the map cell from the position and puts the character there
 (printed: `save: Тейлор Столлворт at (8303.5, 11689.5) z0`). Test (independent oracle): the saved square lies in a `livingroom` of the cell header at the saved z — matches the real screenshot.
-NOT done: everything else in the save (inventory, health, skills, world modifications, `map/` chunk data, time of day, zombies); writing saves; loading any save other than the first local player; z > 0 starting levels untested.
+NOT done: everything else in the save (inventory, health, skills, world modifications, `map/` chunk data, applying time of day, zombies); writing saves; loading any save other than the first local player; z > 0 starting levels untested.
 
-## Save time-of-day: first look at `map_t.bin` (566 bytes) — UNRESOLVED, NOT used by the client
-Big-endian. Bytes: magic `GMTM`, i32 249 (= worldversion in players.db), f32 1.0, i32 0, i32 750, f32 10.951, f32 10.952, i32 8, i32 6, i32 1993, ...
-A reading that fits the layout: multiplier 1.0, 750 = ?, time of day 10.95 h, month index 8, day index 6, year 1993.
-PROBLEM: the real-game screenshots of this exact save are NIGHT-dark outdoors (unlit squares fully black, a light cone on the road), which does not fit 10:57. So at least one field is misread
-(or the screenshot is dark for another reason, e.g. the character spawned in a closed room with the outdoor sun hidden by the room visibility rules). No in-game clock oracle was captured. Do not build on these fields.
+## Save time/date prefix (2026-11-11)
+The installed 42.21.0 jar is SHA-256 `e1a69eb743ede60b213a0fe7f8b83d4fcab773036d256cc4543a336f3b058a33` (REA archive identification). `SaveTimeProbe` invokes the original `GameTime.load(DataInputStream)` on a copy of the isolated profile's `map_t.bin` (SHA-256 `d3f557bf76844c1fd304f9718c8471010d7eded05d88809aa00808c81646db1d`) and on individually patched copies; it consumed the whole file and the selected outputs were repeated identically in `tests/golden/save_time_probe.txt`. In version 249, tested changes identify the current f32 time at offset 24 and day/month/year integers at 28/32/36; raw day and month are zero-based as used by the game's Lua. The sampled file yields 11:25, year 1993, month index 6, day index 8. Prior notes treated a different time as an unverified guess; the original loader now establishes these fields for this copied file. It does not establish the time of the older screenshots or explain their lighting.
+
+`zomboid-content::save::parse_game_time_prefix` reads only these fields and rejects other versions, short/invalid headers and times outside [0,24). Its tests compare all 11 original probe cases, including original f32 minute truncation (6.1 becomes 06:05). `zomboid-ctl save-time <save-dir|map_t.bin>` inspects a file; the client reports the value when `--save` points to a folder with `map_t.bin`. On the copied save, the normal client `--save /tmp/pz-save-time-copy --shot <out> --lit-room` reported 11:25 and produced a PNG byte-identical to `screenshots/port_save_auto_2026-11-11.png`; this confirms the value is reported without changing the image, not original visual parity. Time is not yet applied to simulation, weather or lighting, and the remaining file fields, other versions, and consistent snapshots of actively written saves are unverified.
 
 ## Visibility mask parameter sweep (same single night sample; whole-frame mean|luma diff| vs screenshots/game_clean2.png)
 Which room-less squares to keep next to the player's room: 8-neighbours 18.14; 4-neighbours 17.34 (CHOSEN); room + east/south neighbours 16.27; room squares only 16.18.
@@ -226,7 +225,7 @@ Real game, same save, pressed S (1.5 s, unpaused then paused), then Esc > "Вы�
 2. Found the "wall cutaway" rule: the real game does not draw walls on the camera-facing sides (south/east) of the player's room. Rule in Scene::retain_room: keep a room-less square only when the player's room is on its +x or +y side.
    Whole-frame mean|luma diff| (0..255): frame 1 17.34 -> 16.27, frame 2 (held out, not used to choose the rule) 28.12 -> 27.09.
 3. What still differs: lighting (the road light cone and the dark vignette), grass strips, the room's far-side outside details. Frame 2 residual 27.1 is dominated by lighting.
-Still one scene, one room, night. The time-of-day question (map_t.bin) stays unresolved.
+Still one scene and one room; the time represented in those older screenshots remains unverified. The time/date fields of a later copied save have since been measured as described above.
 
 ## Night ambient (`--lit-room` => x0.8) — measured, partial
 

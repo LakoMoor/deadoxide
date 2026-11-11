@@ -71,10 +71,10 @@
       "weight": 5,
       "measured": false,
       "score": 0.1,
-      "how": "author estimate: the player position is read from players.db; nothing else",
+      "how": "author estimate: player position and selected time fields are read; most save state and writing are missing",
       "facts": [
         "player position and floor from a real save now drive window and offscreen camera; z=1 additionally checked with a synthetic copy",
-        "save writing, changed world data and time of day are not implemented"
+        "version 249 save time/date fields are read and checked against the original; simulation, save writing and changed world data remain unimplemented"
       ],
       "percent": 10
     },
@@ -130,6 +130,6 @@
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
     "goldenLogLines": 22,
-    "testsPassed": 45
+    "testsPassed": 46
   }
 }

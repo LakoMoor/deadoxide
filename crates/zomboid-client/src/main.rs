@@ -537,6 +537,21 @@ fn main() -> anyhow::Result<()> {
         .position(|s| s == "--save")
         .map(|j| load_saved_player(&a[j + 1]))
         .transpose()?;
+    if let Some(j) = a.iter().position(|s| s == "--save") {
+        let save_path = std::path::Path::new(&a[j + 1]);
+        let folder = if save_path.is_dir() {
+            Some(save_path)
+        } else {
+            save_path.parent()
+        };
+        if let Some(path) = folder.map(|p| p.join("map_t.bin")).filter(|p| p.is_file()) {
+            match zomboid_content::save::load_game_time(&path) {
+                Ok(t) => println!("save time: {:02}:{:02}, year {}, month index {}, day index {} (not applied to simulation)",
+                    t.hour(), t.minutes(), t.year, t.month_index, t.day_index),
+                Err(e) => eprintln!("save time unavailable: {e}"),
+            }
+        }
+    }
     let cell = a
         .get(2)
         .filter(|s| !s.starts_with("--"))

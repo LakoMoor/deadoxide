@@ -35,6 +35,62 @@ pub fn load_player(db: &Path) -> Result<Option<SavedPlayer>, String> {
     }
 }
 
+/// Prefix of build 42.21.0 `map_t.bin`. Month and day retain the original's zero-based values.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SavedGameTime {
+    pub version: i32,
+    pub time_of_day: f32,
+    pub year: i32,
+    pub month_index: i32,
+    pub day_index: i32,
+}
+
+impl SavedGameTime {
+    /// zombie.GameTime.getHour: integer hour for a validated time in [0, 24).
+    pub fn hour(&self) -> u32 {
+        self.time_of_day as u32
+    }
+
+    /// zombie.GameTime.getMinutes: preserve the original f32 subtraction and truncation.
+    pub fn minutes(&self) -> u32 {
+        ((self.time_of_day - self.hour() as f32) * 60.0) as u32
+    }
+}
+
+/// zombie.GameTime.load: read only the measured time/date fields of a version 249 save.
+/// This does not parse or validate the remainder of the file.
+pub fn parse_game_time_prefix(bytes: &[u8]) -> Result<SavedGameTime, String> {
+    if bytes.len() < 40 {
+        return Err("map_t.bin is shorter than the time header".into());
+    }
+    if &bytes[..4] != b"GMTM" {
+        return Err("map_t.bin has an unsupported header".into());
+    }
+    let i32_at =
+        |i: usize| i32::from_be_bytes([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]);
+    let version = i32_at(4);
+    if version != 249 {
+        return Err(format!("unsupported map_t.bin version {version}"));
+    }
+    let time_of_day = f32::from_bits(i32_at(24) as u32);
+    if !time_of_day.is_finite() || !(0.0..24.0).contains(&time_of_day) {
+        return Err("map_t.bin contains an unsupported time of day".into());
+    }
+    Ok(SavedGameTime {
+        version,
+        time_of_day,
+        day_index: i32_at(28),
+        month_index: i32_at(32),
+        year: i32_at(36),
+    })
+}
+
+/// Reads the measured time prefix without modifying the save.
+pub fn load_game_time(path: &Path) -> Result<SavedGameTime, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    parse_game_time_prefix(&bytes)
+}
+
 /// The 256x256 map cell that contains a world position.
 pub fn cell_of(x: f64, y: f64) -> (i32, i32) {
     ((x / 256.0).floor() as i32, (y / 256.0).floor() as i32)
@@ -43,6 +99,72 @@ pub fn cell_of(x: f64, y: f64) -> (i32, i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn time_header_matches_original_controlled_probe() {
+        // Minimal synthetic prefix: version 249 and the original-observed fields.
+        let mut original = [0u8; 40];
+        original[..4].copy_from_slice(b"GMTM");
+        for (offset, bits) in [
+            (4, 249u32),
+            (8, 1.0f32.to_bits()),
+            (16, 750),
+            (20, 0x4136c9cb),
+            (24, 0x4136ca18),
+            (28, 8),
+            (32, 6),
+            (36, 1993),
+        ] {
+            original[offset..offset + 4].copy_from_slice(&bits.to_be_bytes());
+        }
+        let fixture = include_str!("../../../tests/golden/save_time_probe.txt");
+        let mut count = 0;
+        for line in fixture.lines() {
+            let (name, output) = line
+                .strip_prefix("PROBE ")
+                .expect("probe line")
+                .split_once('=')
+                .expect("probe fields");
+            let expected: Vec<_> = output.split(',').collect();
+            assert_eq!(expected.len(), 7);
+            let mut bytes = original;
+            let patch: Option<(usize, u32)> = match name {
+                "original" => None,
+                "current" => Some((24, 19.75f32.to_bits())),
+                "previous" => Some((20, 3.5f32.to_bits())),
+                "day" => Some((28, 17)),
+                "month" => Some((32, 2)),
+                "year" => Some((36, 1998)),
+                _ => Some((
+                    24,
+                    name.strip_prefix("time-")
+                        .expect("time case")
+                        .parse::<f32>()
+                        .expect("float")
+                        .to_bits(),
+                )),
+            };
+            if let Some((offset, value)) = patch {
+                bytes[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
+            }
+            let t = parse_game_time_prefix(&bytes).expect("time prefix");
+            assert_eq!(
+                t.time_of_day.to_bits(),
+                u32::from_str_radix(expected[0], 16).unwrap(),
+                "{name}"
+            );
+            assert_eq!(t.hour(), expected[1].parse().unwrap(), "{name}");
+            assert_eq!(t.minutes(), expected[2].parse().unwrap(), "{name}");
+            assert_eq!(t.year, expected[3].parse().unwrap(), "{name}");
+            assert_eq!(t.month_index, expected[4].parse().unwrap(), "{name}");
+            assert_eq!(t.day_index, expected[5].parse().unwrap(), "{name}");
+            count += 1;
+        }
+        assert_eq!(count, 11);
+        assert!(parse_game_time_prefix(&original[..39]).is_err());
+        original[7] = 0;
+        assert!(parse_game_time_prefix(&original).is_err());
+    }
+
     #[test]
     fn cell_of_matches_the_known_spawn() {
         assert_eq!(cell_of(8303.5, 11689.5), (32, 45));

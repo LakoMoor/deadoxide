@@ -10,6 +10,17 @@ fn main() -> Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(".."));
     match cmd.as_str() {
+        "save-time" => {
+            let file = if root.is_dir() {
+                root.join("map_t.bin")
+            } else {
+                root
+            };
+            let time = zomboid_content::save::load_game_time(&file).map_err(anyhow::Error::msg)?;
+            println!("save time {:02}:{:02} (raw {:.8}), year {}, month index {}, day index {}, version {}",
+                time.hour(), time.minutes(), time.time_of_day, time.year, time.month_index, time.day_index, time.version);
+            Ok(())
+        }
         "check" => {
             let inv = zomboid_content::inventory(&root);
             println!("== media/ files by top directory ==");
