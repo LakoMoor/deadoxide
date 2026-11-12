@@ -25,6 +25,9 @@ pub struct Collision {
     /// zombie.iso.IsoGridSquare.collideMatrix of every loaded square, computed by the ported engine
     /// (`IsoGridSquare::calculate_matrices`). Empty in synthetic tests, which use the flag rules below.
     collide_matrix: HashMap<(i32, i32, i32), i32>,
+    /// Per square, bit `(dx+1) + (dy+1)*3`: a closed door, window or window frame stops that step
+    /// (zombie.iso.IsoGridSquare.testCollideSpecialObjects). Doors cannot be opened in the client yet.
+    special: HashMap<(i32, i32, i32), u16>,
 }
 
 impl Collision {
@@ -34,6 +37,11 @@ impl Collision {
     /// Store the original-equivalent collide matrix of a square (bit `x + y*3 + z*9`, offsets + 1, set = blocked).
     pub fn set_collide_matrix(&mut self, x: i32, y: i32, z: i32, matrix: i32) {
         self.collide_matrix.insert((x, y, z), matrix);
+    }
+    pub fn set_special_blocks(&mut self, x: i32, y: i32, z: i32, mask: u16) {
+        if mask != 0 {
+            self.special.insert((x, y, z), mask);
+        }
     }
     fn f(&self, x: i32, y: i32, z: i32) -> u16 {
         self.flags.get(&(x, y, z)).copied().unwrap_or(0)
@@ -101,6 +109,14 @@ impl Collision {
         // Doors and windows as objects (TestCollide) are not part of the matrix and not modelled yet.
         let (mdx, mdy) = (to.0 - from.0, to.1 - from.1);
         if mdx.abs() <= 1 && mdy.abs() <= 1 {
+            // testCollideAdjacent: special objects are asked first, then the matrix.
+            if self
+                .special
+                .get(&(from.0, from.1, z))
+                .is_some_and(|m| m >> ((mdx + 1) + (mdy + 1) * 3) & 1 == 1)
+            {
+                return false;
+            }
             if let Some(m) = self.collide_matrix.get(&(from.0, from.1, z)) {
                 return (m >> ((mdx + 1) + (mdy + 1) * 3 + 9)) & 1 == 0;
             }

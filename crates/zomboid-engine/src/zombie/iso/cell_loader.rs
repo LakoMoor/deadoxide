@@ -237,6 +237,7 @@ fn new_window<R: JavaRandom>(
     Ok(IsoObject::new(
         ObjectKind::IsoWindow(IsoWindow {
             north,
+            open: false,
             locked,
             perma_locked,
             smashed: false,
@@ -340,13 +341,20 @@ pub fn do_tile_object_creation<R: JavaRandom>(
         if has(ctx.sprites, F::windowW) || has(ctx.sprites, F::windowN) {
             let north = has(ctx.sprites, F::windowN);
             let mut w = new_window(ctx, sq, spr, north)?;
+            // zombie.iso.objects.IsoWindow.setSmashed / setGlassRemoved: the shown sprite follows the state.
+            let mut shown = None;
             if let ObjectKind::IsoWindow(win) = &mut w.kind {
                 if b_glass_removed_window {
                     win.smashed = true;
                     win.glass_removed = true;
+                    shown = Some(win.glass_removed_sprite);
                 } else if b_smashed_window {
                     win.smashed = true;
+                    shown = Some(win.smashed_sprite);
                 }
+            }
+            if let Some(sprite) = shown {
+                w.sprite = sprite;
             }
             obj = Some(add_object(ctx.sprites, sq, w, true));
         } else if !has(ctx.sprites, F::WindowW) && !has(ctx.sprites, F::WindowN) {

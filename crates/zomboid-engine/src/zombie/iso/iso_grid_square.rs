@@ -955,3 +955,199 @@ impl IsoGridSquare {
         (c, p, v)
     }
 }
+
+/// A world object found by a square lookup: the square's coordinates and the index in its `objects`.
+pub type ObjectAt = (i32, i32, i32, usize);
+
+impl IsoGridSquare {
+    fn at(&self, i: usize) -> ObjectAt {
+        (self.x, self.y, self.z, i)
+    }
+
+    /// zombie.iso.IsoGridSquare.isEdgeElementTo with isEdgeElement: does `pred(square, north_edge)` hold on the edge
+    /// shared with `other`? NORTH/WEST edges belong to a square itself, SOUTH/EAST to its neighbour on that side.
+    fn is_edge_element_to<G: GetSquare>(
+        &self,
+        other: &IsoGridSquare,
+        g: &G,
+        pred: &dyn Fn(&IsoGridSquare, bool) -> bool,
+    ) -> bool {
+        if std::ptr::eq(self, other) {
+            return false;
+        }
+        let north = |sq: &IsoGridSquare| pred(sq, true);
+        let west = |sq: &IsoGridSquare| pred(sq, false);
+        let south = |sq: &IsoGridSquare| {
+            g.get_grid_square(sq.x, sq.y + 1, sq.z)
+                .is_some_and(|s| pred(s, true))
+        };
+        let east = |sq: &IsoGridSquare| {
+            g.get_grid_square(sq.x + 1, sq.y, sq.z)
+                .is_some_and(|s| pred(s, false))
+        };
+        self.x > other.x && (west(self) || east(other))
+            || self.x < other.x && (west(other) || east(self))
+            || self.y > other.y && (north(self) || south(other))
+            || self.y < other.y && (north(other) || south(self))
+    }
+
+    /// zombie.iso.IsoGridSquare.hasBlockedWindow: a window on that edge that is neither open nor smashed.
+    /// Barricades are not modelled yet.
+    fn has_blocked_window(&self, north: bool) -> bool {
+        self.objects.iter().any(|o| matches!(&o.kind, ObjectKind::IsoWindow(w) if w.north == north && !w.smashed && !w.open))
+    }
+    /// zombie.iso.IsoGridSquare.hasBlockedDoor: a closed door on that edge.
+    fn has_blocked_door(&self, north: bool) -> bool {
+        self.objects
+            .iter()
+            .any(|o| matches!(&o.kind, ObjectKind::IsoDoor(d) if d.north == north && !d.open))
+    }
+
+    /// zombie.iso.IsoGridSquare.isBlockedTo: wall, closed window, closed door or the top of a staircase between the squares.
+    pub fn is_blocked_to<G: GetSquare>(&self, other: &IsoGridSquare, g: &G) -> bool {
+        self.is_wall_to(other, g)
+            || self.is_edge_element_to(other, g, &|s, n| s.has_blocked_window(n))
+            || self.is_edge_element_to(other, g, &|s, n| s.has_blocked_door(n))
+            || (self.x > other.x && self.has_type(T::stairsTW))
+            || (self.y > other.y && self.has_type(T::stairsTN))
+    }
+
+    /// zombie.iso.IsoGridSquare.getSpecialWall: the window, closed door or window frame standing on this square's
+    /// north (`north`) or west edge. Player-built objects (IsoThumpable) are not modelled yet.
+    pub fn get_special_wall(&self, north: bool) -> Option<usize> {
+        for (i, o) in self.objects.iter().enumerate().rev() {
+            if !o.special {
+                continue;
+            }
+            match &o.kind {
+                ObjectKind::IsoWindow(w) if w.north == north => return Some(i),
+                ObjectKind::IsoDoor(d) if d.north == north && !d.open => return Some(i),
+                _ => {}
+            }
+        }
+        if self.has(if north { F::WindowN } else { F::WindowW }) {
+            return self.objects.iter().position(
+                |o| matches!(o.kind, ObjectKind::IsoWindowFrame { north: n } if n == north),
+            );
+        }
+        None
+    }
+
+    /// zombie.iso.IsoGridSquare.testCollideSpecialObjects (IsoGridSquare): the door, window or window frame that stops
+    /// a move from this square to the adjacent `next`, if any. `getSpecialSolid` (player-built and moved furniture) is
+    /// always empty in a freshly loaded world and not modelled.
+    pub fn test_collide_special_objects<G: GetSquare>(
+        &self,
+        alias: &TilePropertyAliasMap,
+        next: Option<&IsoGridSquare>,
+        g: &G,
+    ) -> Option<ObjectAt> {
+        let next = next?;
+        if std::ptr::eq(next, self) {
+            return None;
+        }
+        let wall = |sq: &IsoGridSquare, north: bool| sq.get_special_wall(north).map(|i| sq.at(i));
+        let get = |x: i32, y: i32| g.get_grid_square(x, y, self.z);
+        let (dx, dy) = ((next.x - self.x).signum(), (next.y - self.y).signum());
+        match (dx, dy) {
+            (-1, 0) => {
+                if next.z == self.z
+                    && (self.has_type(T::stairsTW)
+                        || self.has_sloped_surface_to_level_above(alias, IsoDirections::W))
+                {
+                    return None;
+                }
+                wall(self, false)
+            }
+            (0, -1) => {
+                if next.z == self.z
+                    && (self.has_type(T::stairsTN)
+                        || self.has_sloped_surface_to_level_above(alias, IsoDirections::N))
+                {
+                    return None;
+                }
+                wall(self, true)
+            }
+            (1, 0) => wall(next, false),
+            (0, 1) => wall(next, true),
+            (-1, -1) => {
+                if let Some(o) = wall(self, true).or_else(|| wall(self, false)) {
+                    return Some(o);
+                }
+                if let Some(a) = get(self.x, self.y - 1).filter(|a| !self.is_blocked_to(a, g)) {
+                    if let Some(o) = wall(a, false) {
+                        return Some(o);
+                    }
+                }
+                if let Some(b) = get(self.x - 1, self.y).filter(|b| !self.is_blocked_to(b, g)) {
+                    if let Some(o) = wall(b, true) {
+                        return Some(o);
+                    }
+                }
+                None
+            }
+            (1, -1) => {
+                if let Some(o) = wall(self, true) {
+                    return Some(o);
+                }
+                let a = get(self.x, self.y - 1);
+                let b = get(self.x + 1, self.y);
+                if let Some(b) = b {
+                    if let Some(o) = wall(b, false) {
+                        return Some(o);
+                    }
+                    if !self.is_blocked_to(b, g) {
+                        if let Some(o) = wall(b, true) {
+                            return Some(o);
+                        }
+                    }
+                }
+                match (a, b) {
+                    (Some(a), Some(b))
+                        if !self.is_blocked_to(a, g) && !self.is_blocked_to(b, g) =>
+                    {
+                        wall(next, false)
+                    }
+                    _ => None,
+                }
+            }
+            (1, 1) => {
+                let a = get(self.x, self.y + 1);
+                let b = get(self.x + 1, self.y);
+                if let Some(o) = a.and_then(|a| wall(a, true)) {
+                    return Some(o);
+                }
+                if let Some(o) = b.and_then(|b| wall(b, false)) {
+                    return Some(o);
+                }
+                match (a, b) {
+                    (Some(a), Some(b))
+                        if !self.is_blocked_to(a, g) && !self.is_blocked_to(b, g) =>
+                    {
+                        wall(next, false).or_else(|| wall(next, true))
+                    }
+                    _ => None,
+                }
+            }
+            (-1, 1) => {
+                if let Some(o) = wall(self, false) {
+                    return Some(o);
+                }
+                let a = get(self.x, self.y + 1);
+                let b = get(self.x - 1, self.y);
+                if let Some(o) = a.and_then(|a| wall(a, true)) {
+                    return Some(o);
+                }
+                match (a, b) {
+                    (Some(a), Some(b))
+                        if !self.is_blocked_to(a, g) && !self.is_blocked_to(b, g) =>
+                    {
+                        wall(next, true)
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+}

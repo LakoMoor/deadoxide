@@ -75,3 +75,8 @@ fn collide_matches_original() {
 fn entitysprites_match_original() {
     check("entitysprites", &[]);
 }
+
+#[test]
+fn specialcollide_matches_original() {
+    check("specialcollide", &["129", "182"]);
+}

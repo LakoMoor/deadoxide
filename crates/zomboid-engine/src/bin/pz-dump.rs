@@ -31,6 +31,7 @@ fn main() {
         Some("chunkobjects") if a.len() == 7 => chunkobjects(Path::new(&a[2]), &a[3..7]),
         Some("collide") if a.len() == 7 => collide(Path::new(&a[2]), &a[3..7]),
         Some("entitysprites") if a.len() == 3 => entitysprites(Path::new(&a[2])),
+        Some("specialcollide") if a.len() == 5 => specialcollide(Path::new(&a[2]), &a[3..5]),
         _ => Err("usage: see the header of pz-dump.rs".into()),
     };
     match r {
@@ -781,6 +782,105 @@ pub fn entitysprites(root: &Path) -> Result<String, String> {
                 name.unwrap_or("null")
             );
         }
+    }
+    Ok(sb)
+}
+
+/// Collide matrices and door/window collision objects of one 64-square server cell; pairs with SpecialCollideProbe.java.
+pub fn specialcollide(root: &Path, cell: &[String]) -> Result<String, String> {
+    let c: Vec<i32> = cell
+        .iter()
+        .map(|s| s.parse::<i32>().map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
+    let mut rand = RandAbstract::new(java::Random::new(12345));
+    let alarm = AlarmSettings {
+        last_stand: false,
+        power_grid_exists: true,
+        alarm: 1,
+        alarm_decay: 1,
+    };
+    let mut world = IsoWorld::init(root, "Muldraugh, KY", &|_| false, &alarm, &mut rand)?;
+    let mut chunks = Vec::new();
+    {
+        let IsoWorld {
+            sprites,
+            alias,
+            tile_definitions,
+            meta_grid,
+            ..
+        } = &mut world;
+        let mut ctx = LoadContext {
+            sprites,
+            alias,
+            glass_removed_window_sprite_map: &tile_definitions.glass_removed_window_sprite_map,
+            smashed_window_sprite_map: &tile_definitions.smashed_window_sprite_map,
+            meta_grid,
+            rand: &mut rand,
+            locked_houses: 6,
+            missing_tiles: Vec::new(),
+            lotpack_cache: None,
+        };
+        for cx in 0..8 {
+            for cy in 0..8 {
+                *ctx.rand = RandAbstract::new(java::Random::new(12345));
+                let (wx, wy) = (c[0] * 8 + cx, c[1] * 8 + cy);
+                let mut ch = IsoChunk::new(wx, wy);
+                cell_loader::load_cell_binary_chunk(&mut ctx, wx, wy, &mut ch, &mut Vec::new());
+                chunks.push(ch);
+            }
+        }
+    }
+    for ch in &mut chunks {
+        for z in ch.get_min_level()..=ch.get_max_level() {
+            for i in 0..64 {
+                if let Some(sq) = ch.get_grid_square_mut(i % 8, i / 8, z) {
+                    sq.recalc_properties(&world.sprites);
+                }
+            }
+        }
+    }
+    let mut all = Vec::new();
+    for ch in &chunks {
+        for z in ch.get_min_level()..=ch.get_max_level() {
+            for y in 0..8 {
+                for x in 0..8 {
+                    all.extend(ch.get_grid_square(x, y, z));
+                }
+            }
+        }
+    }
+    let grid = ChunkGrid(all.iter().map(|s| ((s.x, s.y, s.z), *s)).collect());
+    let mut sb = String::new();
+    for sq in &all {
+        let (cm, _, _) = sq.calculate_matrices(&world.alias, &grid);
+        let _ = write!(sb, "P {} {} {} {cm:x}", sq.x, sq.y, sq.z);
+        for (dx, dy) in [
+            (0, -1),
+            (-1, -1),
+            (-1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+            (1, 0),
+            (1, -1),
+        ] {
+            let next = grid.get_grid_square(sq.x + dx, sq.y + dy, sq.z);
+            match sq.test_collide_special_objects(&world.alias, next, &grid) {
+                None => sb.push_str(" -"),
+                Some((x, y, z, i)) => {
+                    let o = &grid
+                        .get_grid_square(x, y, z)
+                        .ok_or("object square")?
+                        .objects[i];
+                    let name = o
+                        .sprite
+                        .and_then(|s| world.sprites.sprite(s).name.clone())
+                        .unwrap_or_else(|| "null".into());
+                    let _ = write!(sb, " {}:{name}@{x},{y}", o.kind.class_name());
+                }
+            }
+        }
+        sb.push('\n');
     }
     Ok(sb)
 }

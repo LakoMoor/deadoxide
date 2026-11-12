@@ -60,4 +60,5 @@ sel chunkobjects && server_case chunkobjects ChunkObjectsProbe 1036 1460 1039 14
 [ "$want" = chunkobjects-cell ] && server_case chunkobjects ChunkObjectsProbe 1024 1440 1055 1471
 sel collide && server_case collide CollideProbe 1036 1460 1039 1463
 sel entitysprites && server_case entitysprites EntitySpritesProbe
+sel specialcollide && server_case specialcollide SpecialCollideProbe 129 182
 exit $fail

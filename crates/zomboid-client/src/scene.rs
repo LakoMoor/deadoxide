@@ -247,6 +247,20 @@ pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Sc
         for sq in grid.0.values() {
             let (c, _path, _vision) = sq.calculate_matrices(&world.alias, &grid);
             collision.set_collide_matrix(sq.x, sq.y, sq.z, c);
+            let mut mask = 0u16;
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    let next = grid.get_grid_square(sq.x + dx, sq.y + dy, sq.z);
+                    if (dx != 0 || dy != 0)
+                        && sq
+                            .test_collide_special_objects(&world.alias, next, &grid)
+                            .is_some()
+                    {
+                        mask |= 1 << ((dx + 1) + (dy + 1) * 3);
+                    }
+                }
+            }
+            collision.set_special_blocks(sq.x, sq.y, sq.z, mask);
         }
     }
     let (aw, ah) = (atlas.width as f32, atlas.height as f32);

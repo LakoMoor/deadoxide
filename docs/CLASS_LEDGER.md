@@ -4,12 +4,12 @@ Source: decompiled `projectzomboid.jar` sha256 `e1a69eb743ede60b213a0fe7f8b83d4f
 A method counts as cited when a Rust doc comment names it. Citing is a pointer for reviewers, not proof of parity: evidence lives in docs/COMPATIBILITY.md.
 Method counts are distinct method names per top-level file (overloads and inner classes merged).
 
-**Total: 52 of 3424 classes touched, 253 of 46121 method names cited (0.5%), 962280 decompiled lines.**
+**Total: 52 of 3424 classes touched, 260 of 46121 method names cited (0.6%), 962280 decompiled lines.**
 
 | Package | Classes | Touched | Method names | Cited | Lines |
 |---|---:|---:|---:|---:|---:|
 | generation | 145 | 0 | 2113 | 0 (0.0%) | 193849 |
-| zombie.iso | 346 | 32 | 7277 | 173 (2.4%) | 144530 |
+| zombie.iso | 346 | 32 | 7277 | 180 (2.5%) | 144530 |
 | zombie.core | 450 | 10 | 5920 | 49 (0.8%) | 93574 |
 | zombie.characters | 200 | 0 | 5028 | 0 (0.0%) | 77144 |
 | zombie.network | 436 | 0 | 3229 | 0 (0.0%) | 60679 |
@@ -95,7 +95,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.iso.IsoCell | 2 / 229 | crates/zomboid-client/src/scene.rs, crates/zomboid-engine/src/zombie/iso/iso_cell.rs |
 | zombie.iso.IsoChunk | 4 / 185 | crates/zomboid-engine/src/zombie/iso/iso_chunk.rs |
 | zombie.iso.IsoDirections | 16 / 19 | crates/zomboid-engine/src/zombie/iso/iso_directions.rs |
-| zombie.iso.IsoGridSquare | 25 / 581 | crates/zomboid-client/src/scene.rs, crates/zomboid-client/src/sim.rs, crates/zomboid-engine/src/zombie/iso/iso_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_grid_square.rs |
+| zombie.iso.IsoGridSquare | 31 / 581 | crates/zomboid-client/src/scene.rs, crates/zomboid-client/src/sim.rs, crates/zomboid-engine/src/zombie/iso/iso_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_grid_square.rs |
 | zombie.iso.IsoLot | 4 / 9 | crates/zomboid-engine/src/zombie/iso/iso_lot.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoMetaCell | 5 / 28 | crates/zomboid-engine/src/zombie/iso/iso_meta_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoMetaChunk | 7 / 27 | crates/zomboid-engine/src/zombie/iso/iso_meta_chunk.rs |
@@ -115,7 +115,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.iso.objects.IsoCurtain | 0 / 22 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
 | zombie.iso.objects.IsoDoor | 0 / 132 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
 | zombie.iso.objects.IsoTree | 1 / 41 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
-| zombie.iso.objects.IsoWindow | 1 / 78 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
+| zombie.iso.objects.IsoWindow | 2 / 78 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
 | zombie.iso.sprite.IsoSprite | 6 / 100 | crates/zomboid-engine/src/zombie/iso/sprite/iso_sprite.rs |
 | zombie.iso.sprite.IsoSpriteGrid | 15 / 16 | crates/zomboid-engine/src/zombie/iso/sprite/iso_sprite_grid.rs |
 | zombie.iso.sprite.IsoSpriteManager | 2 / 6 | crates/zomboid-engine/src/zombie/iso/sprite/iso_sprite_manager.rs |

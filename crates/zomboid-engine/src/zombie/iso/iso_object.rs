@@ -18,6 +18,7 @@ pub struct IsoDoor {
 #[derive(Clone, Debug, PartialEq)]
 pub struct IsoWindow {
     pub north: bool,
+    pub open: bool,
     pub locked: bool,
     pub perma_locked: bool,
     pub smashed: bool,
