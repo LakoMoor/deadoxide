@@ -2,7 +2,7 @@
   "releases": [
     {
       "version": "unreleased",
-      "date": "2026-11-11",
+      "date": "2026-11-12",
       "new": [
         "Added a current headless Rosewood screenshot of the Rust client",
         "Tested selected Kahlua numeric literals and translation formats directly against the installed game's Java classes",
@@ -31,7 +31,8 @@
         "Save loading now reads committed SQLite WAL changes instead of copying the database file alone; a synthetic live-writer regression checks the position",
         "Saved sandbox day length is read for version 249; controlled clock arithmetic matches selected original traces but is not yet wired to gameplay",
         "Saved time and day length now initialize a partial fixed-step world clock; selected original 30 Hz traces and midnight dates match, while clock events and weather remain unimplemented",
-        "World clock emits ordered minute, ten-minute, hour and day signals matching selected original traces; Lua and weather handlers are not yet connected"
+        "World clock emits ordered minute, ten-minute, hour and day signals matching selected original traces; Lua and weather handlers are not yet connected",
+        "Selected original Lua event callback mutation and error behavior reproduced; world clock signals now reach explicitly loaded Lua handlers on each step"
       ]
     },
     {

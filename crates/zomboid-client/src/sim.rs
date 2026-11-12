@@ -339,8 +339,7 @@ impl ClockEvent {
     }
 }
 
-/// Partial clock for normal single-player fixed-step operation. Event signals, weather and
-/// original pause/fast-forward controls are not yet connected.
+/// Partial clock for normal single-player fixed-step operation. Weather and original pause/fast-forward controls are not yet connected.
 #[derive(Clone, Debug)]
 pub struct GameClock {
     pub time: f32,
@@ -380,7 +379,7 @@ impl GameClock {
     }
 
     /// zombie.GameTime.update: measured normal-mode clock, date and ordered event signals.
-    /// The caller must dispatch these signals; weather and Lua handlers are not wired yet.
+    /// The caller must dispatch these signals; weather is not wired yet.
     pub fn advance(&mut self, paused: bool) -> Vec<ClockEvent> {
         if paused {
             return Vec::new();
@@ -481,7 +480,7 @@ pub struct World {
     pub player: Player,
     pub zombies: Vec<Zombie>,
     pub clock: Option<GameClock>,
-    /// Signals emitted in the most recent step; Lua and weather dispatch are not yet connected.
+    /// Signals emitted in the most recent step; client dispatches Lua immediately, weather is not connected.
     pub clock_events: Vec<ClockEvent>,
 }
 

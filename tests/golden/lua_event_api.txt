@@ -1,0 +1,8 @@
+EVENT duplicate.1=AAB
+EVENT remove.1=B
+EVENT remove_next.1=AC
+EVENT add_during.1=ABC
+EVENT add_during.2=ABCABCC
+EVENT remove_self.1=AB
+EVENT remove_self.2=ABB
+EVENT error.1=AB

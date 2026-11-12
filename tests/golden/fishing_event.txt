@@ -1,0 +1,4 @@
+FISH before=0.0
+FISH hour=0.0
+FISH day1=1.0
+FISH day2=2.0

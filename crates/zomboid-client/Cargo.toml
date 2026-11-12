@@ -14,6 +14,7 @@ anyhow = "1"
 png = "0.17"
 
 zomboid-content = { path = "../zomboid-content" }
+zomboid-lua = { path = "../zomboid-lua" }
 
 [dev-dependencies]
 rusqlite = { version = "0.32", features = ["bundled"] }

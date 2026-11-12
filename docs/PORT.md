@@ -145,3 +145,7 @@ Evidence in `tests/golden/spawn_rosewood/`:
 - Level range of 32_45 header: width 8, height 8, minLevel -2, maxLevel 3 (6 levels) -> port `--level` index 2 = z 0.
 Other oracle data: sandbox defaults (day length 1 h 30 min, start month July, start day 9, start time 09:00), spawn regions listed: Brandenburg, Echo Creek, Ekron, Fallas Lake, Irvington, March Ridge, Riverside, Rosewood, Valley Station (no Muldraugh/West Point in the list), real-game Lua warning `env.lua namedColorToTable color not found: ProgressYellow`, `ISInventoryTransferUtil require("ISUI/PlayerData/ISPlayerData") failed` (WARN from the real client).
 Still missing: numeric screenshot diff, real-game Lua console log for the full client load, timing/zombie behaviour traces.
+
+### Java-guided Lua events (2026-11-12)
+
+Inspected `zombie.Lua.Event` from the pinned jar with CFR 0.152 locally, then checked callback mutation and failure cases with `LuaEventApiProbe`. Ported the measured subset into the shared Lua environment and connected World clock events to it per step. See `docs/COMPATIBILITY.md` for fixtures, the real FishingUtils.lua test with explicit doubles, and limitations. The Java output is not committed. Automatic game script loading and the Java game APIs are still missing.

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-11-11",
+  "generated": "2026-11-12",
   "game": "Project Zomboid 42.21.0 (Steam build 25485521)",
   "overall": 20.5,
   "note": "Overall and area percentages are subjective weighted estimates, not measured game parity. Facts list the limited measured cases. Full compatibility is unknown.",
@@ -31,7 +31,7 @@
         "Lua files without error under stubs: 1393 of 1395",
         "undefined Java names the Lua touches: 122",
         "selected real-client log lines reproduced: 22 of 22",
-        "numeric literals, translation formatting, RU fallback, item-name lookup, item-list API, selected item properties, learned-recipe lists and recipe-name translation checked against selected original Java cases"
+        "numeric literals, translation formatting, item APIs and Lua event callback mutation and error cases checked against selected original Java cases; world clock events reach explicitly loaded Lua handlers"
       ],
       "percent": 20
     },
@@ -74,7 +74,7 @@
       "how": "author estimate: player position and selected time fields are read; most save state and writing are missing",
       "facts": [
         "player position and floor drive window and offscreen camera; a synthetic live-WAL test verifies committed player coordinates",
-        "saved time and day length initialize a partial World clock; controlled clock state and event-signal traces match selected original cases; Lua event handling and save writing remain unimplemented"
+        "saved time and day length initialize a partial World clock; controlled clock state and event-signal traces match selected original cases; explicitly loaded Lua handlers receive clock events; game APIs and save writing remain incomplete"
       ],
       "percent": 10
     },
@@ -130,6 +130,6 @@
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
     "goldenLogLines": 22,
-    "testsPassed": 55
+    "testsPassed": 57
   }
 }

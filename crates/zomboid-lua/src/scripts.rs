@@ -93,6 +93,7 @@ pub fn install(lua: &Lua, root: &Path) -> Result<usize> {
     )?;
     lua.globals().set("__ScriptItems", items)?;
     lua.globals().set("__ScriptItemOrder", order)?;
+    zomboid_lua::events::install(lua)?;
     lua.load(r#"
 -- Item script objects: Java-style getters resolve to script properties (getWeight -> "Weight").
 local ItemMT = {}
@@ -157,25 +158,11 @@ end
 rawset(_G, "ScriptManager", { instance = SM, getInstance = function() return SM end })
 rawset(_G, "getScriptManager", function() return SM end)
 rawset(_G, "getAllItems", function() return SM:getAllItems() end)
--- Real event registry (LuaEventManager semantics: Add/Remove/Trigger by event name).
-local ev = {}
-local function event(name)
-  local e = rawget(ev, name); if e then return e end
-  local handlers = {}
-  e = { Add = function(f) handlers[#handlers + 1] = f end,
-        Remove = function(f) for i, h in ipairs(handlers) do if h == f then table.remove(handlers, i) break end end end,
-        Trigger = function(...) for _, h in ipairs(handlers) do h(...) end end,
-        count = function() return #handlers end }
-  ev[name] = e; return e
-end
-rawset(_G, "Events", setmetatable({}, { __index = function(_, k) return event(k) end }))
 rawset(_G, "WorldGenUtils", { INSTANCE = { _files = {},
   getFiles = function(self, d) self._files = __listdir(d); return self._files end,
   getFilesNum = function(self) return #self._files end,
   getFile = function(self, i) return self._files[i + 1] end,
   generateSeed = function() return "0" end } })
-rawset(_G, "triggerEvent", function(name, ...) event(name).Trigger(...) end)
-rawset(_G, "LuaEventManager", { AddEvent = function(name) event(name) end, triggerEvent = function(name, ...) event(name).Trigger(...) end })
 "#).exec()?;
     Ok(n)
 }

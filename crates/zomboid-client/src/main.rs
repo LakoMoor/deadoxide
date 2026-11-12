@@ -351,6 +351,7 @@ struct App {
     live: Option<Live>,
     cam: Camera,
     world: World,
+    lua: zomboid_lua::events::EventRuntime,
     acc: f32,
     keys: std::collections::HashSet<KeyCode>,
     drag: Option<(f64, f64)>,
@@ -486,7 +487,11 @@ impl ApplicationHandler for App {
                 // fixed-step simulation (30 Hz), render interpolation not implemented
                 self.acc += dt.min(0.25);
                 while self.acc >= 1.0 / TICK_HZ {
-                    self.world.step(&self.scene.collision, (sx, sy));
+                    if let Err(error) =
+                        advance_world(&mut self.world, &self.scene.collision, (sx, sy), &self.lua)
+                    {
+                        log::error!("Lua event dispatch failed: {error}");
+                    }
                     self.acc -= 1.0 / TICK_HZ;
                 }
                 {
@@ -719,10 +724,19 @@ fn main() -> anyhow::Result<()> {
     if let (Some(time), Some(day)) = (&saved_time, &saved_day) {
         world.clock = sim::GameClock::from_save(time, day);
         if world.clock.is_some() {
-            println!("clock: experimental normal speed; event signals only, Lua/weather/speed controls not connected");
+            println!("clock: experimental normal speed; Lua event dispatch enabled; weather and speed controls not connected");
         } else {
             eprintln!("save clock unavailable: unsupported date");
         }
+    }
+    let lua = zomboid_lua::events::EventRuntime::new()
+        .map_err(|e| anyhow::anyhow!("Lua initialization: {e}"))?;
+    if let Some(i) = a.iter().position(|s| s == "--lua-script") {
+        let path = a
+            .get(i + 1)
+            .ok_or_else(|| anyhow::anyhow!("--lua-script requires a path"))?;
+        lua.load_file(std::path::Path::new(path))
+            .map_err(|e| anyhow::anyhow!("Lua script {path}: {e}"))?;
     }
     if let Some(i) = a.iter().position(|s| s == "--headless-ticks") {
         let ticks: u32 = a
@@ -731,7 +745,7 @@ fn main() -> anyhow::Result<()> {
             .parse()?;
         let trace_events = a.iter().any(|arg| arg == "--trace-clock-events");
         for _ in 0..ticks {
-            world.step(&scene.collision, (0.0, 0.0));
+            advance_world(&mut world, &scene.collision, (0.0, 0.0), &lua)?;
             if trace_events {
                 for event in &world.clock_events {
                     println!("clock event tick={} name={}", world.tick, event.name());
@@ -764,12 +778,81 @@ fn main() -> anyhow::Result<()> {
         live: None,
         cam,
         world,
+        lua,
         acc: 0.0,
         keys: Default::default(),
         drag: None,
         last: std::time::Instant::now(),
     })?;
     Ok(())
+}
+
+/// Dispatch each step immediately; later steps overwrite the world's signal buffer.
+fn advance_world(
+    world: &mut World,
+    collision: &sim::Collision,
+    input: (f32, f32),
+    lua: &zomboid_lua::events::EventRuntime,
+) -> anyhow::Result<()> {
+    world.step(collision, input);
+    for event in &world.clock_events {
+        for error in lua
+            .dispatch(event.name())
+            .map_err(|e| anyhow::anyhow!("Lua event {}: {e}", event.name()))?
+        {
+            log::error!("Lua event {} callback: {}", error.event, error.message);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod event_integration_tests {
+    use super::*;
+    #[test]
+    fn dispatches_each_step_in_original_order() -> anyhow::Result<()> {
+        let collision = sim::Collision::default();
+        let mut world = World::new(
+            1,
+            Player {
+                x: 0.5,
+                y: 0.5,
+                z: 0,
+            },
+            &collision,
+            0,
+            0,
+        );
+        world.clock = Some(sim::GameClock {
+            time: 23.99998,
+            year: 1993,
+            month: 6,
+            day: 8,
+            minutes_per_day: 90.0,
+            effective_multiplier: 1.6,
+            nights_survived: 0,
+        });
+        let lua = zomboid_lua::events::EventRuntime::new().map_err(|e| anyhow::anyhow!("{e}"))?;
+        lua.run_source("trace=''; for _, n in ipairs({'EveryDays','EveryHours','EveryTenMinutes','EveryOneMinute'}) do Events[n].Add(function() trace=trace..n..'|' end) end", "test").map_err(|e| anyhow::anyhow!("{e}"))?;
+        advance_world(&mut world, &collision, (0.0, 0.0), &lua)?;
+        advance_world(&mut world, &collision, (0.0, 0.0), &lua)?;
+        let actual = lua
+            .eval_string("return trace")
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        let line = include_str!("../../../tests/golden/clock_events.txt")
+            .lines()
+            .find(|l| l.starts_with("EVENT 23.99998@0="))
+            .expect("midnight oracle");
+        let events = line
+            .split_once('=')
+            .unwrap()
+            .1
+            .splitn(3, ',')
+            .nth(2)
+            .unwrap();
+        assert_eq!(actual, format!("{events}|"));
+        Ok(())
+    }
 }
 
 /// First unblocked square on a spiral around (gx, gy) at level 0.
