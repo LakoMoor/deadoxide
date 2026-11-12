@@ -1,10 +1,15 @@
 pub mod building_def;
 pub mod building_id;
+pub mod cell_loader;
+pub mod iso_cell;
+pub mod iso_chunk;
 pub mod iso_directions;
+pub mod iso_grid_square;
 pub mod iso_lot;
 pub mod iso_meta_cell;
 pub mod iso_meta_chunk;
 pub mod iso_meta_grid;
+pub mod iso_object;
 pub mod iso_world;
 pub mod lot_header;
 pub mod map_files;

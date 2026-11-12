@@ -35,7 +35,7 @@ server_case() {
   [ -d "$PZ_NATIVES" ] || { echo "FAIL $name: no natives in $PZ_NATIVES (set PZ_NATIVES)"; fail=1; return; }
   javac -nowarn -encoding UTF-8 -cp "$ROOT/projectzomboid.jar" -d target/original-probe tests/original_probe/ServerHarness.java "tests/original_probe/$probe.java" 2>target/oracle/$name.javac \
     || { cat target/oracle/$name.javac; echo "FAIL $name (javac)"; fail=1; return; }
-  (cd "$ROOT" && java -Djava.awt.headless=true -Djava.library.path="$PZ_NATIVES" -Xmx4g -cp "$HERE/target/original-probe:projectzomboid.jar" "$probe" "$HERE/target/oracle/pz-oracle-$name" "$@" >"$HERE/target/oracle/$name.java.txt" 2>"$HERE/target/oracle/$name.java.err") \
+  (cd "$ROOT" && java -Djava.awt.headless=true --enable-final-field-mutation=ALL-UNNAMED -Djava.library.path="$PZ_NATIVES" -Xmx4g -cp "$HERE/target/original-probe:projectzomboid.jar" "$probe" "$HERE/target/oracle/pz-oracle-$name" "$@" >"$HERE/target/oracle/$name.java.txt" 2>"$HERE/target/oracle/$name.java.err") \
     || { grep -n 'ORACLE\|Exception' target/oracle/$name.java.err | tail -5; echo "FAIL $name (server probe)"; fail=1; return; }
   ./target/release/pz-dump "$name" "$ROOT" "$@" >target/oracle/$name.rust.txt 2>target/oracle/$name.rust.err \
     || { tail -5 target/oracle/$name.rust.err; echo "FAIL $name (pz-dump)"; fail=1; return; }
@@ -54,4 +54,6 @@ sel lotpack && run_case lotpack LotPackProbe "Muldraugh, KY" 30 43 34 47
 # the whole map (4.2 GB of lotpacks, minutes): sh tools/oracle.sh lotpack-all
 [ "$want" = lotpack-all ] && run_case lotpack LotPackProbe "Muldraugh, KY" 0 0 99 99
 sel metagrid && server_case metagrid MetaGridProbe "Muldraugh, KY" 30 43 34 47
+# not in the default run until it matches (first gap: one Rand draw for crafted_01_29, a water-collector entity)
+[ "$want" = chunkobjects ] && server_case chunkobjects ChunkObjectsProbe 1036 1460 1039 1463
 exit $fail

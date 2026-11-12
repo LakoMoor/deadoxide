@@ -6,13 +6,19 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::Path;
 
+use zomboid_engine::java;
+use zomboid_engine::zombie::core::random::rand_abstract::RandAbstract;
 use zomboid_engine::zombie::core::tile_property_alias_map::TilePropertyAliasMap;
+use zomboid_engine::zombie::iso::cell_loader::{self, LoadContext};
+use zomboid_engine::zombie::iso::iso_chunk::IsoChunk;
 use zomboid_engine::zombie::iso::iso_lot::IsoLot;
 use zomboid_engine::zombie::iso::iso_meta_grid::{AlarmSettings, IsoMetaGrid};
+use zomboid_engine::zombie::iso::iso_object::ObjectKind;
 use zomboid_engine::zombie::iso::iso_world::{
     self, TileDefinitions, VANILLA_TILE_DEFINITION_FILES,
 };
 use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::IsoSpriteManager;
+use zomboid_engine::zombie::iso::sprite_details::iso_flag_type::IsoFlagType;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -21,6 +27,7 @@ fn main() {
         Some("lotheaders") if a.len() == 4 => lotheaders(Path::new(&a[2]), &a[3]),
         Some("lotpack") if a.len() == 8 => lotpack(Path::new(&a[2]), &a[3], &a[4..8]),
         Some("metagrid") if a.len() == 8 => metagrid(Path::new(&a[2]), &a[3], &a[4..8]),
+        Some("chunkobjects") if a.len() == 7 => chunkobjects(Path::new(&a[2]), &a[3..7]),
         _ => Err("usage: see the header of pz-dump.rs".into()),
     };
     match r {
@@ -443,5 +450,165 @@ pub fn metagrid(root: &Path, game_map: &str, range: &[String]) -> Result<String,
             let _ = writeln!(sb, "H {cx} {cy} {h:x}");
         }
     }
+    Ok(sb)
+}
+
+/// Tile definitions as IsoWorld.init loads them (vanilla files, no mods, no entity scripts).
+fn load_tile_definitions(
+    root: &Path,
+) -> Result<(IsoSpriteManager, TilePropertyAliasMap, TileDefinitions), String> {
+    let mut files = Vec::new();
+    for (f, n) in VANILLA_TILE_DEFINITION_FILES {
+        let p = root.join("media").join(f);
+        files.push((
+            f,
+            n,
+            std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?,
+        ));
+    }
+    let mut defs = TileDefinitions::default();
+    let mut alias = TilePropertyAliasMap::default();
+    let mut sm = IsoSpriteManager::new();
+    for (f, n, data) in &files {
+        if let Err(e) = defs.load_tile_definitions_property_strings(data, f, *n) {
+            eprintln!("PROBE strings {f}: {e}");
+        }
+    }
+    defs.set_custom_property_values()?;
+    defs.generate_tile_property_lookup_tables(&mut alias, &[]);
+    for (f, n, data) in &files {
+        if let Err(e) = iso_world::load_tile_definitions(&mut sm, &alias, data, f, *n) {
+            eprintln!("PROBE load {f}: {e}");
+        }
+    }
+    iso_world::register_fake_jumbo_tree(&mut sm, &alias, 7);
+    Ok((sm, alias, defs))
+}
+
+/// Squares and objects of a chunk range through the port of CellLoader.LoadCellBinaryChunk; pairs with
+/// ChunkObjectsProbe.java (run inside the booted original).
+pub fn chunkobjects(root: &Path, range: &[String]) -> Result<String, String> {
+    let r: Vec<i32> = range
+        .iter()
+        .map(|s| s.parse::<i32>().map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
+    let media = root.join("media");
+    let (mut sm, alias, mut defs) = load_tile_definitions(root)?;
+    sm.add_sprite("media/ui/missing-tile.png");
+    defs.loaded_tile_definitions(&mut sm, &alias, &|_| false)?;
+    let mut g = IsoMetaGrid::default();
+    let dirs = IsoMetaGrid::lot_directories(&media, "Muldraugh, KY");
+    g.create_step1(&media, &dirs, (-250, -250, 250, 250))?;
+    for e in g.load_all_cells(&mut |_| 1, &mut |_, _| Vec::new()) {
+        eprintln!("{e}");
+    }
+    let alarm = AlarmSettings {
+        last_stand: false,
+        power_grid_exists: true,
+        alarm: 1,
+        alarm_decay: 1,
+    };
+    g.create_step2(&alarm, &mut |_| 1, &mut |a, _| a);
+    let mut rand = RandAbstract::new(java::Random::new(12345));
+    let mut ctx = LoadContext {
+        sprites: &mut sm,
+        alias: &alias,
+        glass_removed_window_sprite_map: &defs.glass_removed_window_sprite_map,
+        smashed_window_sprite_map: &defs.smashed_window_sprite_map,
+        meta_grid: &g,
+        rand: &mut rand,
+        locked_houses: 6,
+        missing_tiles: Vec::new(),
+    };
+    let mut sb = String::new();
+    let _ = writeln!(sb, "O lockedHouses={}", ctx.locked_houses);
+    for wx in r[0]..=r[2] {
+        for wy in r[1]..=r[3] {
+            let mut ch = IsoChunk::new(wx, wy);
+            let mut errors = Vec::new();
+            let ok = cell_loader::load_cell_binary_chunk(&mut ctx, wx, wy, &mut ch, &mut errors);
+            for e in errors {
+                eprintln!("chunk {wx},{wy}: {e}");
+            }
+            let _ = writeln!(
+                sb,
+                "C {wx} {wy} {ok} {} {}",
+                ch.get_min_level(),
+                ch.get_max_level()
+            );
+            for z in ch.get_min_level()..=ch.get_max_level() {
+                for y in 0..8 {
+                    for x in 0..8 {
+                        let Some(sq) = ch.get_grid_square(x, y, z) else {
+                            continue;
+                        };
+                        let _ = write!(sb, "S {x} {y} {z} {}", sq.room_id);
+                        let name = |s: Option<_>| {
+                            s.and_then(|s| ctx.sprites.sprite(s).name.clone())
+                                .unwrap_or_else(|| "null".to_string())
+                        };
+                        for o in &sq.objects {
+                            let _ = write!(sb, " {}:{}", o.kind.class_name(), name(o.sprite));
+                            for at in o.attached_anim_sprite.iter().flatten() {
+                                let _ = write!(sb, "+{}", name(Some(*at)));
+                            }
+                            if o.special {
+                                sb.push('*');
+                            }
+                            if o.render_y_offset != 0.0 {
+                                let _ = write!(sb, "@{:x}", o.render_y_offset.to_bits());
+                            }
+                            let b = |v: bool| if v { 1 } else { 0 };
+                            match &o.kind {
+                                ObjectKind::IsoDoor(d) => {
+                                    let _ = write!(
+                                        sb,
+                                        "{{o{}n{}l{}k{}}}",
+                                        b(d.open),
+                                        b(d.north),
+                                        b(d.locked),
+                                        b(d.locked_by_key)
+                                    );
+                                }
+                                ObjectKind::IsoWindow(w) => {
+                                    let _ = write!(
+                                        sb,
+                                        "{{n{}l{}p{}s{}}}",
+                                        b(w.north),
+                                        b(w.locked),
+                                        b(w.perma_locked),
+                                        b(w.smashed)
+                                    );
+                                }
+                                ObjectKind::IsoTree(t) => {
+                                    let _ = write!(sb, "{{s{}}}", t.size);
+                                }
+                                _ => {}
+                            }
+                            if o.sprite.is_some_and(|s| {
+                                ctx.sprites
+                                    .sprite(s)
+                                    .properties
+                                    .has(IsoFlagType::vegitation)
+                            }) {
+                                let _ = write!(
+                                    sb,
+                                    "{{t{:x},{:x},{:x}}}",
+                                    o.tintr.to_bits(),
+                                    o.tintg.to_bits(),
+                                    o.tintb.to_bits()
+                                );
+                            }
+                        }
+                        sb.push('\n');
+                    }
+                }
+            }
+        }
+    }
+    for t in &ctx.missing_tiles {
+        eprintln!("Missing tile definition: {t}");
+    }
+    let _ = writeln!(sb, "X {}", ctx.rand.next(1000000));
     Ok(sb)
 }
