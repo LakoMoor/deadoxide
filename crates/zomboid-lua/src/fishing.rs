@@ -62,6 +62,122 @@ pub struct ChumEntry {
     pub end_time: i32,
 }
 
+/// Partial `zombie.iso.FishSchoolManager` chum state. Times are original calendar minutes;
+/// the caller must provide a correctly converted game calendar and invoke expiration.
+#[derive(Default)]
+pub struct ChumState {
+    entries: std::collections::HashMap<i64, ChumEntry>,
+}
+
+/// zombie.iso.FishSchoolManager.coordsToHash: signed paired-coordinate key.
+pub fn coords_hash(x: i32, y: i32) -> i64 {
+    let x1 = if x >= 0 {
+        2_i64 * i64::from(x)
+    } else {
+        -2_i64 * i64::from(x) - 1
+    };
+    let y1 = if y >= 0 {
+        2_i64 * i64::from(y)
+    } else {
+        -2_i64 * i64::from(y) - 1
+    };
+    let c = if x1 >= y1 {
+        x1.wrapping_mul(x1).wrapping_add(x1).wrapping_add(y1)
+    } else {
+        x1.wrapping_add(y1.wrapping_mul(y1))
+    } / 2;
+    if (x < 0) == (y < 0) {
+        c
+    } else {
+        c.wrapping_neg().wrapping_sub(1)
+    }
+}
+
+impl ChumState {
+    /// zombie.iso.FishSchoolManager.load: restore chum records, last duplicate wins.
+    pub fn from_save(save: &FishingSave) -> Self {
+        Self {
+            entries: save
+                .chum
+                .iter()
+                .map(|c| {
+                    (
+                        c.key,
+                        ChumEntry {
+                            key: c.key,
+                            max_force_time: c.max_force_time,
+                            end_time: c.end_time,
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    /// zombie.iso.FishSchoolManager.addChum: replace the coordinate's record.
+    pub fn add(&mut self, x: i32, y: i32, force: i32, now: i32) {
+        let key = coords_hash(x, y);
+        let max_force_time = now.wrapping_add(100);
+        self.entries.insert(
+            key,
+            ChumEntry {
+                key,
+                max_force_time,
+                end_time: max_force_time.wrapping_add(force),
+            },
+        );
+    }
+
+    /// zombie.iso.FishSchoolManager.updateFishingData: expire after, not at, end time.
+    pub fn expire(&mut self, now: i32) {
+        self.entries.retain(|_, chum| now <= chum.end_time);
+    }
+
+    /// zombie.iso.FishSchoolManager.getFishAbundance: chum contribution only.
+    /// Fish points, no-fish zones and sound suppression must be handled by the caller;
+    /// this must not be presented as complete fish abundance.
+    pub fn contribution(
+        &self,
+        x: i32,
+        y: i32,
+        now: i32,
+        disabled: &std::collections::HashSet<i64>,
+    ) -> i32 {
+        let mut result = 0_i32;
+        for i in -6_i32..=6 {
+            for j in -6_i32..=6 {
+                let px = x.wrapping_add(i);
+                let py = y.wrapping_add(j);
+                let key = coords_hash(px, py);
+                let Some(chum) = self.entries.get(&key) else {
+                    continue;
+                };
+                if disabled.contains(&key) {
+                    continue;
+                }
+                let dx = px as f32 - x as f32;
+                let dy = py as f32 - y as f32;
+                let distance = ((dx * dx + dy * dy) as f64).sqrt();
+                let amount: i32 = if distance <= 3.0 {
+                    15
+                } else if distance <= 4.5 {
+                    7
+                } else {
+                    continue;
+                };
+                let value = if now > chum.max_force_time {
+                    amount
+                } else {
+                    let progress = 100_i32.wrapping_sub(chum.max_force_time.wrapping_sub(now));
+                    amount.wrapping_mul(progress) / 100
+                };
+                result = result.wrapping_add(value);
+            }
+        }
+        result
+    }
+}
+
 /// zombie.iso.FishSchoolManager.load: decode saved seeds and chum entries.
 pub fn read_fishing_save(path: &Path) -> std::io::Result<FishingSave> {
     let data = std::fs::read(path)?;
@@ -129,6 +245,91 @@ pub fn install(lua: &Lua, trash_seed: i32) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn chum_matches_original_with_fish_points_excluded() {
+        let mut chum = ChumState::default();
+        // Only elapsed minutes matter here; original uses UTC calendar minutes.
+        chum.add(100, 100, 200, 0);
+        let disabled = std::collections::HashSet::new();
+        let fixture = include_str!("../../../tests/golden/fishing_chum_behavior.txt");
+        let mut count = 0;
+        for line in fixture
+            .lines()
+            .filter(|line| line.starts_with("CHUM ") && line.contains(','))
+        {
+            let (input, expected) = line.strip_prefix("CHUM ").unwrap().split_once('=').unwrap();
+            let mut fields = input.split(',');
+            let hour: f32 = fields.next().unwrap().parse().unwrap();
+            let x = fields.next().unwrap().parse().unwrap();
+            let y = fields.next().unwrap().parse().unwrap();
+            let minute = ((hour - 10.0) * 60.0) as i32;
+            let actual = chum.contribution(x, y, minute, &disabled).max(0) as f64;
+            assert_eq!(actual, expected.parse::<f64>().unwrap(), "{line}");
+            count += 1;
+        }
+        assert_eq!(count, 42);
+        for line in fixture
+            .lines()
+            .filter_map(|line| line.strip_prefix("HASH "))
+        {
+            let (input, output) = line.split_once('=').unwrap();
+            let (x, y) = input.split_once(',').unwrap();
+            assert_eq!(
+                coords_hash(x.parse().unwrap(), y.parse().unwrap()),
+                output.parse().unwrap(),
+                "{line}"
+            );
+        }
+        let restored = ChumState::from_save(&FishingSave {
+            seed: 0,
+            trash_seed: 0,
+            chum: vec![ChumEntry {
+                key: coords_hash(100, 100),
+                max_force_time: 100,
+                end_time: 300,
+            }],
+        });
+        assert_eq!(
+            restored.contribution(100, 100, 60, &disabled),
+            chum.contribution(100, 100, 60, &disabled)
+        );
+        let mut multiple = ChumState::default();
+        multiple.add(100, 100, 200, 0);
+        multiple.add(104, 100, 200, 0);
+        for case in ["combined", "replaced"] {
+            if case == "replaced" {
+                multiple.add(104, 100, 200, 0);
+            }
+            let prefix = format!("CHUM {case}=");
+            let expected: f64 = fixture
+                .lines()
+                .find_map(|line| line.strip_prefix(&prefix))
+                .unwrap()
+                .parse()
+                .unwrap();
+            assert_eq!(
+                multiple.contribution(102, 100, 60, &disabled) as f64,
+                expected
+            );
+        }
+        let mut blocked = std::collections::HashSet::new();
+        blocked.insert(coords_hash(100, 100));
+        let noise: f64 = fixture
+            .lines()
+            .find_map(|line| line.strip_prefix("CHUM noise="))
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(
+            chum.contribution(100, 100, 60, &blocked).max(0) as f64,
+            noise
+        );
+        chum.expire(300);
+        assert_eq!(chum.contribution(100, 100, 300, &disabled), 15);
+        chum.expire(301);
+        assert_eq!(chum.contribution(100, 100, 301, &disabled), 0);
+    }
+
     #[test]
     fn parses_original_written_chum_data() {
         let fixture = include_str!("../../../tests/golden/fishing_chum_save.txt");

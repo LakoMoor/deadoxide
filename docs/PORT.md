@@ -157,3 +157,7 @@ Ported the deterministic `FishSchoolManager.getTrashAbundance` path from the pin
 ### Original fishing save and chum (2026-11-12)
 
 Validated the fishing seed and six Lua-visible trash results against an isolated original save loaded by Java. Added a reader for both seeds and chum records, checked against a controlled file written and reloaded by the original. Chum gameplay and Rust save writing are not implemented; see the compatibility ledger.
+
+### Chum behavior (2026-11-12)
+
+Ported the state, coordinate hashing, additive chum contribution and explicit expiration for controlled calendar minutes, with original Java fixtures. This component is not connected to Lua or client gameplay: fish points and zone state must be interleaved with chum, and the game-calendar minute mapping must be verified first. See the compatibility ledger.

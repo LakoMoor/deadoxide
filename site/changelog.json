@@ -34,7 +34,8 @@
         "World clock emits ordered minute, ten-minute, hour and day signals matching selected original traces; Lua and weather handlers are not yet connected",
         "Selected original Lua event callback mutation and error behavior reproduced; world clock signals now reach explicitly loaded Lua handlers on each step",
         "Fishing trash abundance calculation matches 75 selected original Java cases and is available to explicitly loaded Lua using a saved trash seed; other fishing mechanics remain incomplete",
-        "Fishing save reader handles both seeds and chum records; compared with a real isolated save and a controlled file written by the original"
+        "Fishing save reader handles both seeds and chum records; compared with a real isolated save and a controlled file written by the original",
+        "Chum contribution, noise suppression and expiration checked against selected original Java cases; not yet connected to the client fishing loop"
       ]
     },
     {
