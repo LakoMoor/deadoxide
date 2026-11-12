@@ -1,24 +1,41 @@
 {
   "generated": "2026-11-12",
   "game": "Project Zomboid 42.21.0 (Steam build 25485521)",
-  "overall": 20.5,
+  "overall": 21.4,
   "note": "Overall and area percentages are subjective weighted estimates, not measured game parity. Facts list the limited measured cases. Full compatibility is unknown.",
+  "engine": {
+    "classesTouched": 52,
+    "classes": 3424,
+    "methodsCited": 253,
+    "methods": 46121,
+    "methodPercent": 0.55,
+    "oracleCases": [
+      "chunkobjects",
+      "collide",
+      "entitysprites",
+      "lotheaders",
+      "lotpack",
+      "metagrid",
+      "tiledefs"
+    ]
+  },
   "areas": [
     {
       "id": "formats",
       "name": "Reading the game's files",
       "weight": 15,
       "measured": false,
-      "score": 0.5,
+      "score": 0.5625,
       "how": "share of the game's format families we read (list below); coverage inside each family is also incomplete",
       "facts": [
-        "format families read: 8 of 16",
+        "direct port from decompiled Java: 253 of 46121 method names (0.55%) in 52 of 3424 classes; byte-identical to the original in 7 oracle cases (chunkobjects, collide, entitysprites, lotheaders, lotpack, metagrid, tiledefs)",
+        "format families read: 9 of 16",
         "cell header parsed: 120687 of 123391 bytes",
         "tile names resolved: 25981 of 26063",
         "Muldraugh map zones: 37389",
-        "not read: 3D models and animations, FMOD sound banks, fonts (.fnt), recipe and vehicle scripts, other save files (map_*.bin, chunks), cell header tail, UI layout and UI textures, mod loading"
+        "not read: 3D models and animations, FMOD sound banks, fonts (.fnt), recipe and vehicle scripts, other save files (map_*.bin, chunks), UI layout and UI textures, mod loading"
       ],
-      "percent": 50
+      "percent": 56.3
     },
     {
       "id": "lua",
@@ -131,6 +148,6 @@
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
     "goldenLogLines": 22,
-    "testsPassed": 66
+    "testsPassed": 69
   }
 }

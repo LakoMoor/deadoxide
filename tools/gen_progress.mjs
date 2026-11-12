@@ -48,7 +48,7 @@ const FAMILIES = [
   ["maps: lotheader (with rooms)", true], ["maps: lotpack (chunks)", true], ["texture packs (.pack)", true], ["tile definitions", true],
   ["item scripts and blocks", true], ["translations", true], ["map zones (objects.lua)", true], ["save: players.db", true],
   ["3D models and animations", false], ["FMOD sound banks", false], ["fonts (.fnt)", false], ["recipe and vehicle scripts", false],
-  ["other save files (map_*.bin, chunks)", false], ["cell header tail", false], ["UI layout and UI textures", false], ["mod loading", false],
+  ["other save files (map_*.bin, chunks)", false], ["cell header tail", true], ["UI layout and UI textures", false], ["mod loading", false],
 ];
 // ---- areas: score 0..1, weight. Score formulas are written next to each area. ----
 const areas = [
@@ -74,6 +74,12 @@ const areas = [
   { id: "audio", name: "Audio", weight: 5, measured: false, score: 0, how: "author estimate", facts: ["not started"] },
   { id: "net", name: "Multiplayer and networking", weight: 5, measured: false, score: 0, how: "author estimate", facts: ["not started"] },
 ];
+// ---- direct port (zomboid-engine): measured from the code and the oracle, not weighted into the estimates above ----
+const ledger = fs.readFileSync(path.join(repo, "docs", "CLASS_LEDGER.md"), "utf8").match(/Total: (\d+) of (\d+) classes touched, (\d+) of (\d+) method names cited/);
+const oracleCases = fs.readdirSync(path.join(repo, "tests", "golden", "engine")).filter((f) => f.endsWith(".sha256") && !f.includes("-all")).map((f) => f.replace(".sha256", ""));
+const engine = { classesTouched: +ledger[1], classes: +ledger[2], methodsCited: +ledger[3], methods: +ledger[4], methodPercent: +(100 * ledger[3] / ledger[4]).toFixed(2), oracleCases };
+const engineFact = `direct port from decompiled Java: ${engine.methodsCited} of ${engine.methods} method names (${engine.methodPercent}%) in ${engine.classesTouched} of ${engine.classes} classes; byte-identical to the original in ${oracleCases.length} oracle cases (${oracleCases.join(", ")})`;
+areas.find((a) => a.id === "formats").facts.unshift(engineFact);
 const totalW = areas.reduce((s, a) => s + a.weight, 0);
 for (const a of areas) { a.percent = +(a.score * 100).toFixed(1); }
 const overall = +(areas.reduce((s, a) => s + a.score * a.weight, 0) / totalW * 100).toFixed(1);
@@ -83,6 +89,7 @@ const out = {
   game: "Project Zomboid 42.21.0 (Steam build 25485521)",
   overall,
   note: "Overall and area percentages are subjective weighted estimates, not measured game parity. Facts list the limited measured cases. Full compatibility is unknown.",
+  engine,
   areas,
   numbers: { luaOk, luaAll, globals, tilesUsed, tilesMissing, headerParsed, headerTotal, zones: +zones, frameDiff1: d1, frameDiff2: d2, frameDiffBeforeMask: d0, logKindsMatched: parityKinds, goldenLogLines: golden, testsPassed: passed },
 };
