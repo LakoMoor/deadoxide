@@ -153,3 +153,7 @@ Inspected `zombie.Lua.Event` from the pinned jar with CFR 0.152 locally, then ch
 ### Fishing trash calculation (2026-11-12)
 
 Ported the deterministic `FishSchoolManager.getTrashAbundance` path from the pinned original, checked against 75 original Java results and exposed through the client's partial Lua API with an explicitly supplied or saved trash seed. The fishing save reader and client Lua call are tested with synthetic data; the rest of fishing remains unimplemented. See `docs/COMPATIBILITY.md`.
+
+### Original fishing save and chum (2026-11-12)
+
+Validated the fishing seed and six Lua-visible trash results against an isolated original save loaded by Java. Added a reader for both seeds and chum records, checked against a controlled file written and reloaded by the original. Chum gameplay and Rust save writing are not implemented; see the compatibility ledger.

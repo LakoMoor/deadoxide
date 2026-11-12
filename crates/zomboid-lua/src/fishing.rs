@@ -47,10 +47,28 @@ pub fn trash_abundance(seed: i32, x: i32, y: i32) -> f64 {
     0.05
 }
 
-/// zombie.iso.FishSchoolManager.load: read the seeds from a complete fishingData.bin.
-/// Chum entries are validated but not used by the trash abundance calculation.
-pub fn saved_trash_seed(path: &Path) -> std::io::Result<i32> {
+/// Persistent state read by zombie.iso.FishSchoolManager.load.
+#[derive(Debug, PartialEq, Eq)]
+pub struct FishingSave {
+    pub seed: i32,
+    pub trash_seed: i32,
+    pub chum: Vec<ChumEntry>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ChumEntry {
+    pub key: i64,
+    pub max_force_time: i32,
+    pub end_time: i32,
+}
+
+/// zombie.iso.FishSchoolManager.load: decode saved seeds and chum entries.
+pub fn read_fishing_save(path: &Path) -> std::io::Result<FishingSave> {
     let data = std::fs::read(path)?;
+    parse_fishing_save(&data)
+}
+
+fn parse_fishing_save(data: &[u8]) -> std::io::Result<FishingSave> {
     let invalid = || {
         std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -60,8 +78,10 @@ pub fn saved_trash_seed(path: &Path) -> std::io::Result<i32> {
     if data.len() < 12 {
         return Err(invalid());
     }
-    let count = i32::from_be_bytes(data[8..12].try_into().map_err(|_| invalid())?);
-    let count = usize::try_from(count).map_err(|_| invalid())?;
+    let int = |bytes: &[u8]| -> std::io::Result<i32> {
+        Ok(i32::from_be_bytes(bytes.try_into().map_err(|_| invalid())?))
+    };
+    let count = usize::try_from(int(&data[8..12])?).map_err(|_| invalid())?;
     let expected = count
         .checked_mul(16)
         .and_then(|n| n.checked_add(12))
@@ -69,9 +89,24 @@ pub fn saved_trash_seed(path: &Path) -> std::io::Result<i32> {
     if data.len() < expected {
         return Err(invalid());
     }
-    Ok(i32::from_be_bytes(
-        data[4..8].try_into().map_err(|_| invalid())?,
-    ))
+    let mut chum = Vec::with_capacity(count);
+    for entry in data[12..expected].chunks_exact(16) {
+        chum.push(ChumEntry {
+            key: i64::from_be_bytes(entry[0..8].try_into().map_err(|_| invalid())?),
+            max_force_time: int(&entry[8..12])?,
+            end_time: int(&entry[12..16])?,
+        });
+    }
+    Ok(FishingSave {
+        seed: int(&data[0..4])?,
+        trash_seed: int(&data[4..8])?,
+        chum,
+    })
+}
+
+/// zombie.iso.FishSchoolManager.load: obtain the persistent seed used for trash.
+pub fn saved_trash_seed(path: &Path) -> std::io::Result<i32> {
+    Ok(read_fishing_save(path)?.trash_seed)
 }
 
 /// Install only the supported FishSchoolManager method; other fishing APIs are absent.
@@ -94,6 +129,43 @@ pub fn install(lua: &Lua, trash_seed: i32) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn parses_original_written_chum_data() {
+        let fixture = include_str!("../../../tests/golden/fishing_chum_save.txt");
+        let hex = fixture
+            .lines()
+            .next()
+            .unwrap()
+            .strip_prefix("CHUM hex=")
+            .unwrap();
+        let bytes: Vec<u8> = hex
+            .as_bytes()
+            .chunks_exact(2)
+            .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16).unwrap())
+            .collect();
+        let save = parse_fishing_save(&bytes).unwrap();
+        assert_eq!((save.seed, save.trash_seed), (12345, 54321));
+        let mut actual: Vec<_> = save
+            .chum
+            .iter()
+            .map(|entry| (entry.key, entry.max_force_time, entry.end_time))
+            .collect();
+        actual.sort_unstable();
+        let expected: Vec<_> = fixture
+            .lines()
+            .filter_map(|line| line.strip_prefix("CHUM entry="))
+            .map(|line| {
+                let mut f = line.split(',');
+                (
+                    f.next().unwrap().parse::<i64>().unwrap(),
+                    f.next().unwrap().parse::<i32>().unwrap(),
+                    f.next().unwrap().parse::<i32>().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(actual, expected);
+    }
+
     #[test]
     fn saved_data_seed_reaches_lua() -> Result<()> {
         let dir = std::env::temp_dir().join(format!("pz-fishing-test-{}", std::process::id()));
@@ -123,6 +195,49 @@ mod tests {
             .eval()?;
         assert_eq!(actual.to_bits(), 0x3fb8cafc0ccccccd);
         std::fs::remove_dir_all(dir).map_err(mlua::Error::external)?;
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires the isolated original-game save"]
+    fn isolated_original_save_matches_java_load() -> Result<()> {
+        let path = std::env::var_os("PZ_FISHING_SAVE")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../profile/Saves/Sandbox/2026-11-07_22-34-13/fishingData.bin")
+            });
+        let seed = saved_trash_seed(&path).map_err(mlua::Error::external)?;
+        let lua = Lua::new();
+        install(&lua, seed)?;
+        let fixture = include_str!("../../../tests/golden/fishing_saved.txt");
+        let expected_seed: i32 = fixture
+            .lines()
+            .next()
+            .unwrap()
+            .strip_prefix("SAVE seeds=")
+            .unwrap()
+            .split_once(',')
+            .unwrap()
+            .1
+            .parse()
+            .unwrap();
+        assert_eq!(seed, expected_seed);
+        let function: mlua::Function = lua.load("return function(x,y) return FishSchoolManager.getInstance():getTrashAbundance(x,y) end").eval()?;
+        let mut count = 0;
+        for line in fixture
+            .lines()
+            .filter_map(|line| line.strip_prefix("SAVE trash="))
+        {
+            let mut fields = line.split(',');
+            let x: i32 = fields.next().unwrap().parse().unwrap();
+            let y: i32 = fields.next().unwrap().parse().unwrap();
+            let expected = u64::from_str_radix(fields.next().unwrap(), 16).unwrap();
+            let actual: f64 = function.call((x, y))?;
+            assert_eq!(actual.to_bits(), expected, "{line}");
+            count += 1;
+        }
+        assert_eq!(count, 6);
         Ok(())
     }
 
