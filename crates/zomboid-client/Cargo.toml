@@ -12,6 +12,7 @@ log = "0.4"
 env_logger = "0.11"
 anyhow = "1"
 png = "0.17"
+chrono = "0.4.45"
 
 zomboid-content = { path = "../zomboid-content" }
 zomboid-lua = { path = "../zomboid-lua" }

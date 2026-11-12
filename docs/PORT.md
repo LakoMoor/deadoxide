@@ -160,4 +160,8 @@ Validated the fishing seed and six Lua-visible trash results against an isolated
 
 ### Chum behavior (2026-11-12)
 
-Ported the state, coordinate hashing, additive chum contribution and explicit expiration for controlled calendar minutes, with original Java fixtures. This component is not connected to Lua or client gameplay: fish points and zone state must be interleaved with chum, and the game-calendar minute mapping must be verified first. See the compatibility ledger.
+Ported the state, coordinate hashing, additive chum contribution and explicit expiration for controlled calendar minutes, with original Java fixtures. The client now connects chum creation and expiry to the partial world clock; fish points and zone state still need to be interleaved with chum. See the compatibility ledger.
+
+### Chum action integration (2026-11-12)
+
+The saved fishing state now reaches the client Lua manager; `addChum` uses a game-calendar minute and the client advances/expunges the partial state each World step. Original UTC calendar fixtures and an actual original Lua action with explicitly stubbed inventory/network are compared in tests. Host-local DST and full original update order remain unverified; fish abundance and actual inventory/network mechanics are absent.

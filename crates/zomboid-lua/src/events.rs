@@ -34,17 +34,50 @@ pub fn install(lua: &Lua) -> Result<ErrorBuffer> {
 pub struct EventRuntime {
     lua: Lua,
     errors: ErrorBuffer,
+    fishing: RefCell<Option<crate::fishing::SharedFishingRuntime>>,
 }
 
 impl EventRuntime {
     pub fn new() -> Result<Self> {
         let lua = Lua::new();
         let errors = install(&lua)?;
-        Ok(Self { lua, errors })
+        Ok(Self {
+            lua,
+            errors,
+            fishing: RefCell::new(None),
+        })
     }
 
     pub fn install_fishing_trash(&self, trash_seed: i32) -> Result<()> {
         crate::fishing::install(&self.lua, trash_seed)
+    }
+
+    pub fn install_fishing_save(&self, save: &crate::fishing::FishingSave) -> Result<()> {
+        *self.fishing.borrow_mut() = Some(crate::fishing::install_saved(&self.lua, save)?);
+        Ok(())
+    }
+
+    /// Update the game-calendar minute and expire chum before dispatching the next events.
+    pub fn update_fishing_time(&self, minute: Option<i32>) {
+        if let Some(state) = self.fishing.borrow().as_ref() {
+            let mut state = state.borrow_mut();
+            state.calendar_minutes = minute;
+            if let Some(now) = minute {
+                state.chum.expire(now);
+            }
+        }
+    }
+
+    /// Measured chum contribution only; excludes fish points and noise state.
+    pub fn fishing_chum_contribution(&self, x: i32, y: i32) -> Option<i32> {
+        let fishing = self.fishing.borrow();
+        let state = fishing.as_ref()?.borrow();
+        Some(state.chum.contribution(
+            x,
+            y,
+            state.calendar_minutes?,
+            &std::collections::HashSet::new(),
+        ))
     }
 
     pub fn run_source(&self, source: &str, name: &str) -> Result<()> {

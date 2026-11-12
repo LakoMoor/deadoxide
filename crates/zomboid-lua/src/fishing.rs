@@ -1,6 +1,8 @@
 //! Partial fishing calculations for the original saved trash seed.
 use mlua::{Lua, Result, Value};
+use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
 
 /// zombie.iso.FishSchoolManager.procedureRandomFloat: Java signed wrapping and f64-to-f32 rounding.
 fn random_float(x: i64, y: i64, seed: i64) -> f32 {
@@ -114,6 +116,11 @@ impl ChumState {
         }
     }
 
+    /// Return a chum entry by world coordinate.
+    pub fn entry(&self, x: i32, y: i32) -> Option<&ChumEntry> {
+        self.entries.get(&coords_hash(x, y))
+    }
+
     /// zombie.iso.FishSchoolManager.addChum: replace the coordinate's record.
     pub fn add(&mut self, x: i32, y: i32, force: i32, now: i32) {
         let key = coords_hash(x, y);
@@ -225,13 +232,38 @@ pub fn saved_trash_seed(path: &Path) -> std::io::Result<i32> {
     Ok(read_fishing_save(path)?.trash_seed)
 }
 
-/// Install only the supported FishSchoolManager method; other fishing APIs are absent.
-pub fn install(lua: &Lua, trash_seed: i32) -> Result<()> {
+/// Runtime portion of FishSchoolManager supported by this port.
+pub struct FishingRuntime {
+    pub chum: ChumState,
+    pub calendar_minutes: Option<i32>,
+}
+
+pub type SharedFishingRuntime = Rc<RefCell<FishingRuntime>>;
+
+/// Install the supported FishSchoolManager methods with restored chum state.
+pub fn install_saved(lua: &Lua, save: &FishingSave) -> Result<SharedFishingRuntime> {
+    let state = Rc::new(RefCell::new(FishingRuntime {
+        chum: ChumState::from_save(save),
+        calendar_minutes: None,
+    }));
     let manager = lua.create_table()?;
+    let trash_seed = save.trash_seed;
     manager.set(
         "getTrashAbundance",
         lua.create_function(move |_, (_self, x, y): (Value, i32, i32)| {
             Ok(trash_abundance(trash_seed, x, y))
+        })?,
+    )?;
+    let shared = state.clone();
+    manager.set(
+        "addChum",
+        lua.create_function(move |_, (_self, x, y, force): (Value, i32, i32, f64)| {
+            let mut fishing = shared.borrow_mut();
+            let now = fishing
+                .calendar_minutes
+                .ok_or_else(|| mlua::Error::runtime("game calendar unavailable for addChum"))?;
+            fishing.chum.add(x, y, force as i32, now);
+            Ok(())
         })?,
     )?;
     let class = lua.create_table()?;
@@ -239,12 +271,63 @@ pub fn install(lua: &Lua, trash_seed: i32) -> Result<()> {
         "getInstance",
         lua.create_function(move |_, ()| Ok(manager.clone()))?,
     )?;
-    lua.globals().set("FishSchoolManager", class)
+    lua.globals().set("FishSchoolManager", class)?;
+    Ok(state)
+}
+
+/// Install the trash-only environment with no saved chum or clock.
+pub fn install(lua: &Lua, trash_seed: i32) -> Result<()> {
+    install_saved(
+        lua,
+        &FishingSave {
+            seed: -1,
+            trash_seed,
+            chum: Vec::new(),
+        },
+    )?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "requires installed original game Lua"]
+    fn real_chum_action_matches_original_with_test_doubles() -> Result<()> {
+        let lua = Lua::new();
+        let state = install_saved(
+            &lua,
+            &FishingSave {
+                seed: 1,
+                trash_seed: 2,
+                chum: vec![],
+            },
+        )?;
+        state.borrow_mut().calendar_minutes = Some(12368760);
+        lua.load("require=function() end; ISBaseTimedAction={derive=function() return {} end}; sendServerCommand=function(...) sent=true end; sendRemoveItemFromContainer=function(...) removed=true end").exec()?;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            "../../../media/lua/shared/TimedActions/Fishing/TimedActions/AddChumToWaterAction.lua",
+        );
+        let script = std::fs::read_to_string(path).map_err(mlua::Error::external)?;
+        lua.load(&script).exec()?;
+        lua.load("local item={getHungChange=function() return -0.10125 end}; local inv={Remove=function() end}; local obj={chum=item,square={getX=function() return 100 end,getY=function() return 100 end},character={getInventory=function() return inv end}}; success=AddChumToWaterAction.complete(obj)").exec()?;
+        let globals = lua.globals();
+        let success: bool = globals.get("success")?;
+        let sent: bool = globals.get("sent")?;
+        let removed: bool = globals.get("removed")?;
+        let fish = state.borrow();
+        let chum = fish.chum.entry(100, 100).expect("action added chum");
+        let observed = format!(
+            "ACTION success={success} sent={sent} removed={removed} max={} end={}\n",
+            chum.max_force_time, chum.end_time
+        );
+        assert_eq!(
+            observed,
+            include_str!("../../../tests/golden/fishing_action.txt")
+        );
+        Ok(())
+    }
+
     #[test]
     fn chum_matches_original_with_fish_points_excluded() {
         let mut chum = ChumState::default();

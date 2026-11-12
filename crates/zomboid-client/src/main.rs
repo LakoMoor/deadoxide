@@ -750,11 +750,17 @@ fn main() -> anyhow::Result<()> {
         None
     };
     if let Some(path) = fishing_path {
-        let seed = zomboid_lua::fishing::saved_trash_seed(&path)?;
-        lua.install_fishing_trash(seed)
+        let saved_fishing = zomboid_lua::fishing::read_fishing_save(&path)?;
+        lua.install_fishing_save(&saved_fishing)
             .map_err(|e| anyhow::anyhow!("fishing Lua API: {e}"))?;
-        println!("fishing: loaded saved trash seed; other fishing APIs incomplete");
+        println!("fishing: loaded saved seeds and chum; fish abundance and other fishing APIs incomplete");
     }
+    lua.update_fishing_time(
+        world
+            .clock
+            .as_ref()
+            .and_then(|clock| clock.calendar_minutes(&chrono::Local)),
+    );
     if let Some(i) = a.iter().position(|s| s == "--lua-script") {
         let path = a
             .get(i + 1)
@@ -819,6 +825,12 @@ fn advance_world(
     lua: &zomboid_lua::events::EventRuntime,
 ) -> anyhow::Result<()> {
     world.step(collision, input);
+    lua.update_fishing_time(
+        world
+            .clock
+            .as_ref()
+            .and_then(|clock| clock.calendar_minutes(&chrono::Local)),
+    );
     for event in &world.clock_events {
         for error in lua
             .dispatch(event.name())
@@ -833,6 +845,59 @@ fn advance_world(
 #[cfg(test)]
 mod event_integration_tests {
     use super::*;
+    #[test]
+    fn lua_chum_tracks_world_clock_and_expires() -> anyhow::Result<()> {
+        let collision = sim::Collision::default();
+        let mut world = World::new(
+            1,
+            Player {
+                x: 0.5,
+                y: 0.5,
+                z: 0,
+            },
+            &collision,
+            0,
+            0,
+        );
+        world.clock = Some(sim::GameClock {
+            time: 10.0,
+            year: 1993,
+            month: 6,
+            day: 8,
+            minutes_per_day: 90.0,
+            effective_multiplier: 1.6,
+            nights_survived: 0,
+        });
+        let lua = zomboid_lua::events::EventRuntime::new().map_err(|e| anyhow::anyhow!("{e}"))?;
+        lua.install_fishing_save(&zomboid_lua::fishing::FishingSave {
+            seed: 1,
+            trash_seed: 2,
+            chum: vec![],
+        })
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        lua.update_fishing_time(
+            world
+                .clock
+                .as_ref()
+                .and_then(|c| c.calendar_minutes(&chrono::Local)),
+        );
+        lua.run_source(
+            "FishSchoolManager.getInstance():addChum(100,100,200)",
+            "chum",
+        )
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+        world.clock.as_mut().unwrap().time = 11.0;
+        advance_world(&mut world, &collision, (0.0, 0.0), &lua)?;
+        assert_eq!(lua.fishing_chum_contribution(100, 100), Some(9));
+        world.clock.as_mut().unwrap().time = 15.0;
+        advance_world(&mut world, &collision, (0.0, 0.0), &lua)?;
+        assert_eq!(lua.fishing_chum_contribution(100, 100), Some(15));
+        world.clock.as_mut().unwrap().time = 15.016667;
+        advance_world(&mut world, &collision, (0.0, 0.0), &lua)?;
+        assert_eq!(lua.fishing_chum_contribution(100, 100), Some(0));
+        Ok(())
+    }
+
     #[test]
     fn dispatches_each_step_in_original_order() -> anyhow::Result<()> {
         let collision = sim::Collision::default();

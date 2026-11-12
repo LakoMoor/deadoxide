@@ -352,6 +352,20 @@ pub struct GameClock {
 }
 
 impl GameClock {
+    /// zombie.GameTime.getCalender / FishSchoolManager.getCurrentGameTimeInMinutes.
+    /// Ambiguous local times choose the later instant, like Java's standard-time preference;
+    /// nonexistent local times are rejected rather than guessed.
+    pub fn calendar_minutes<T: chrono::TimeZone>(&self, timezone: &T) -> Option<i32> {
+        use chrono::{Duration, NaiveDate};
+        let date = NaiveDate::from_ymd_opt(self.year, u32::from(self.month) + 1, 1)?
+            .checked_add_signed(Duration::days(i64::from(self.day) - 1))?;
+        let hour = self.time as u32;
+        let minute = ((self.time - hour as f32) * 60.0) as u32;
+        let local = date.and_hms_opt(hour, minute, 0)?;
+        let instant = timezone.from_local_datetime(&local).latest()?;
+        Some((instant.timestamp_millis() / 60000) as i32)
+    }
+
     /// zombie.GameTime.advanceOneDay: days per zero-based month in the Gregorian calendar.
     fn days_in_month(year: i32, month: u8) -> Option<u8> {
         match month {
@@ -652,6 +666,32 @@ mod world_tests {
             trace.join("\n"),
             include_str!("../../../tests/golden/clock_saved_events.txt").trim()
         );
+    }
+
+    #[test]
+    fn fishing_calendar_matches_original_utc() {
+        for line in include_str!("../../../tests/golden/fishing_calendar.txt").lines() {
+            let (input, output) = line.strip_prefix("CAL ").unwrap().split_once('=').unwrap();
+            let mut values = input.split(',');
+            let year = values.next().unwrap().parse().unwrap();
+            let month = values.next().unwrap().parse().unwrap();
+            let day = values.next().unwrap().parse().unwrap();
+            let time = f32::from_bits(u32::from_str_radix(values.next().unwrap(), 16).unwrap());
+            let clock = GameClock {
+                time,
+                year,
+                month,
+                day,
+                minutes_per_day: 90.0,
+                effective_multiplier: 1.6,
+                nights_survived: 0,
+            };
+            assert_eq!(
+                clock.calendar_minutes(&chrono::Utc),
+                Some(output.parse().unwrap()),
+                "{line}"
+            );
+        }
     }
 
     #[test]
