@@ -4,12 +4,12 @@ Source: decompiled `projectzomboid.jar` sha256 `e1a69eb743ede60b213a0fe7f8b83d4f
 A method counts as cited when a Rust doc comment names it. Citing is a pointer for reviewers, not proof of parity: evidence lives in docs/COMPATIBILITY.md.
 Method counts are distinct method names per top-level file (overloads and inner classes merged).
 
-**Total: 52 of 3424 classes touched, 260 of 46121 method names cited (0.6%), 962280 decompiled lines.**
+**Total: 59 of 3424 classes touched, 277 of 46121 method names cited (0.6%), 962280 decompiled lines.**
 
 | Package | Classes | Touched | Method names | Cited | Lines |
 |---|---:|---:|---:|---:|---:|
 | generation | 145 | 0 | 2113 | 0 (0.0%) | 193849 |
-| zombie.iso | 346 | 32 | 7277 | 180 (2.5%) | 144530 |
+| zombie.iso | 346 | 33 | 7277 | 188 (2.6%) | 144530 |
 | zombie.core | 450 | 10 | 5920 | 49 (0.8%) | 93574 |
 | zombie.characters | 200 | 0 | 5028 | 0 (0.0%) | 77144 |
 | zombie.network | 436 | 0 | 3229 | 0 (0.0%) | 60679 |
@@ -46,7 +46,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.pot | 5 | 0 | 75 | 0 (0.0%) | 1440 |
 | zombie.buildingRooms | 6 | 0 | 72 | 0 (0.0%) | 1359 |
 | zombie.vehicleNetworkSound | 10 | 0 | 96 | 0 (0.0%) | 1263 |
-| zombie.basements | 7 | 0 | 43 | 0 (0.0%) | 1224 |
+| zombie.basements | 7 | 6 | 43 | 9 (20.9%) | 1224 |
 | zombie.fileSystem | 13 | 0 | 87 | 0 (0.0%) | 1205 |
 | zombie.seating | 3 | 0 | 79 | 0 (0.0%) | 1062 |
 | zombie.characterTextures | 4 | 0 | 36 | 0 (0.0%) | 1002 |
@@ -76,6 +76,12 @@ Method counts are distinct method names per top-level file (overloads and inner 
 |---|---:|---|
 | zombie.GameTime | 7 / 136 | crates/zomboid-client/src/sim.rs, crates/zomboid-content/src/save.rs |
 | zombie.SandboxOptions | 3 / 101 | crates/zomboid-content/src/sandbox.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
+| zombie.basements.BasementDefinition | 0 / 0 | crates/zomboid-engine/src/zombie/basements/mod.rs |
+| zombie.basements.BasementPlacement | 0 / 0 | crates/zomboid-engine/src/zombie/basements/mod.rs |
+| zombie.basements.BasementSpawnLocation | 0 / 0 | crates/zomboid-engine/src/zombie/basements/mod.rs |
+| zombie.basements.Basements | 9 / 28 | crates/zomboid-engine/src/zombie/basements/mod.rs |
+| zombie.basements.BasementsPerMap | 0 / 1 | crates/zomboid-engine/src/zombie/basements/mod.rs |
+| zombie.basements.BasementsV1 | 0 / 3 | crates/zomboid-engine/src/zombie/basements/mod.rs |
 | zombie.core.TilePropertyAliasMap | 5 / 6 | crates/zomboid-engine/src/zombie/core/tile_property_alias_map.rs |
 | zombie.core.Translator | 1 / 41 | crates/zomboid-lua/src/text.rs |
 | zombie.core.math.PZMath | 13 / 68 | crates/zomboid-engine/src/zombie/core/math/pz_math.rs |
@@ -88,7 +94,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.core.utils.BooleanGrid | 7 / 13 | crates/zomboid-engine/src/zombie/core/utils/boolean_grid.rs |
 | zombie.entity.components.spriteconfig.SpriteConfigManager | 2 / 56 | crates/zomboid-engine/src/zombie/scripting/sprite_config.rs |
 | zombie.gameStates.ChooseGameInfo | 1 / 76 | crates/zomboid-engine/src/zombie/game_states/choose_game_info.rs |
-| zombie.iso.BuildingDef | 3 / 67 | crates/zomboid-engine/src/zombie/iso/building_def.rs |
+| zombie.iso.BuildingDef | 8 / 67 | crates/zomboid-engine/src/zombie/iso/building_def.rs |
 | zombie.iso.BuildingID | 5 / 5 | crates/zomboid-engine/src/zombie/iso/building_id.rs |
 | zombie.iso.CellLoader | 4 / 7 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_world.rs |
 | zombie.iso.FishSchoolManager | 8 / 33 | crates/zomboid-lua/src/fishing.rs |
@@ -99,13 +105,14 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.iso.IsoLot | 4 / 9 | crates/zomboid-engine/src/zombie/iso/iso_lot.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoMetaCell | 5 / 28 | crates/zomboid-engine/src/zombie/iso/iso_meta_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoMetaChunk | 7 / 27 | crates/zomboid-engine/src/zombie/iso/iso_meta_chunk.rs |
-| zombie.iso.IsoMetaGrid | 14 / 98 | crates/zomboid-content/src/fishing_zones.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
+| zombie.iso.IsoMetaGrid | 15 / 98 | crates/zomboid-content/src/fishing_zones.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoObject | 5 / 393 | crates/zomboid-engine/src/zombie/iso/iso_object.rs |
 | zombie.iso.IsoWorld | 11 / 131 | crates/zomboid-engine/src/zombie/iso/iso_world.rs |
 | zombie.iso.LotHeader | 4 / 10 | crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs, crates/zomboid-engine/src/zombie/iso/lot_header.rs |
 | zombie.iso.MapFiles | 9 / 14 | crates/zomboid-engine/src/zombie/iso/map_files.rs |
 | zombie.iso.MetaObject | 0 / 7 | crates/zomboid-engine/src/zombie/iso/meta_object.rs |
-| zombie.iso.RoomDef | 7 / 51 | crates/zomboid-engine/src/zombie/iso/room_def.rs |
+| zombie.iso.NewMapBinaryFile | 1 / 16 | crates/zomboid-engine/src/zombie/basements/mod.rs |
+| zombie.iso.RoomDef | 8 / 51 | crates/zomboid-engine/src/zombie/iso/room_def.rs |
 | zombie.iso.RoomID | 5 / 5 | crates/zomboid-engine/src/zombie/iso/room_id.rs |
 | zombie.iso.SpriteDetails.IsoFlagType | 3 / 4 | crates/zomboid-engine/src/zombie/iso/sprite_details/iso_flag_type.rs |
 | zombie.iso.SpriteDetails.IsoObjectType | 3 / 4 | crates/zomboid-engine/src/zombie/iso/sprite_details/iso_object_type.rs |

@@ -912,7 +912,7 @@ pub struct IsoWorld {
 }
 
 impl IsoWorld {
-    /// zombie.iso.IsoWorld.init, the ported part: the tile-definition sequence, then `IsoMetaGrid.Create` for
+    /// zombie.iso.IsoWorld.init, the ported part: the tile-definition sequence, then `IsoMetaGrid.Create` and the procedural basements for
     /// `game_map` (`Core.gameMap`). `has_texture` answers whether a texture of that name exists (always false on a
     /// dedicated server). `rand` is `Rand`.
     pub fn init<R: crate::java::JavaRandom>(
@@ -920,6 +920,8 @@ impl IsoWorld {
         game_map: &str,
         has_texture: &dyn Fn(&str) -> bool,
         alarm: &crate::zombie::iso::iso_meta_grid::AlarmSettings,
+        // `WorldGenParams.getSeed()`; `None` skips the procedural basements (used by probes of the bare grid).
+        world_seed: Option<i64>,
         rand: &mut crate::zombie::core::random::rand_abstract::RandAbstract<R>,
     ) -> Result<Self, String> {
         use crate::zombie::iso::iso_meta_grid::IsoMetaGrid;
@@ -981,6 +983,16 @@ impl IsoWorld {
         meta_grid.create_step2(alarm, &mut |n| cell.borrow_mut().next(n), &mut |a, b| {
             cell.borrow_mut().next_range(a, b)
         });
+        // Basements.beforeLoadMetaGrid (new world: no map_basements.bin yet).
+        if let Some(seed) = world_seed {
+            let b = crate::zombie::basements::Basements::before_load_meta_grid(
+                &media,
+                &mut meta_grid,
+                &dirs,
+                seed,
+            )?;
+            log.extend(b.log);
+        }
         Ok(IsoWorld {
             sprites,
             alias,

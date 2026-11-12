@@ -182,6 +182,67 @@ impl IsoMetaGrid {
         self.cell_index(x, y).and_then(|i| self.grid[i].as_deref())
     }
 
+    pub(crate) fn get_cell_data_mut(&mut self, x: i32, y: i32) -> Option<&mut IsoMetaCell> {
+        self.cell_index(x, y)
+            .and_then(|i| self.grid[i].as_deref_mut())
+    }
+
+    /// zombie.iso.IsoMetaGrid.getBuildingsIntersecting with IsoMetaCell/IsoMetaChunk.getBuildingsIntersecting:
+    /// buildings with a room (registered in the meta chunks) that intersects the rectangle. A building counts through
+    /// its "emptyoutside" rooms only when it has no other rooms.
+    pub fn get_buildings_intersecting(&self, x: i32, y: i32, w: i32, h: i32) -> Vec<BuildingRef> {
+        let mut result = Vec::new();
+        let mut xmax = (x + w) / 8;
+        if (x + w) % 8 == 0 {
+            xmax -= 1;
+        }
+        let mut ymax = (y + h) / 8;
+        if (y + h) % 8 == 0 {
+            ymax -= 1;
+        }
+        for yy in y / 8..=ymax {
+            for xx in x / 8..=xmax {
+                let Some(chunk) = self.get_chunk_data(xx, yy) else {
+                    continue;
+                };
+                for r in chunk.rooms() {
+                    let room = self.room(*r);
+                    let Some(b) = room.building else { continue };
+                    if (!room.is_empty_outside() || self.building(b).rooms.is_empty())
+                        && !result.contains(&b)
+                        && room.intersects(x, y, w, h)
+                    {
+                        result.push(b);
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    /// zombie.iso.IsoMetaGrid.addRoomsToAdjacentCells (BuildingDef, ArrayList): like the one-argument form, for a
+    /// given list of rooms.
+    pub fn add_room_list_to_adjacent_cells(&mut self, b: BuildingRef, rooms: &[RoomRef]) {
+        let def = &self.building_defs[b.0 as usize];
+        let (cell_x, cell_y) = (
+            pz_math::fastfloor(def.x as f32 / 256.0),
+            pz_math::fastfloor(def.y as f32 / 256.0),
+        );
+        let (cell_x2, cell_y2) = ((def.x2 - 1) / 256, (def.y2 - 1) / 256);
+        if cell_x2 == cell_x && cell_y2 == cell_y {
+            return;
+        }
+        for dy in 0..=1 {
+            for dx in 0..=1 {
+                if dx != 0 || dy != 0 {
+                    for &r in rooms {
+                        self.add_room_to_cell(cell_x + dx, cell_y + dy, r);
+                    }
+                }
+            }
+        }
+    }
+
     /// zombie.iso.IsoMetaGrid.higherPriority300x300CellExists
     pub fn higher_priority_300x300_cell_exists(
         &self,
@@ -468,7 +529,7 @@ impl IsoMetaGrid {
     }
 
     /// zombie.iso.IsoMetaCell.addRoom on the cell at (cell_x, cell_y), creating meta chunks as the original does.
-    fn add_room_to_cell(&mut self, cell_x: i32, cell_y: i32, r: RoomRef) {
+    pub(crate) fn add_room_to_cell(&mut self, cell_x: i32, cell_y: i32, r: RoomRef) {
         let Some(idx) = self.cell_index(cell_x, cell_y) else {
             return;
         };

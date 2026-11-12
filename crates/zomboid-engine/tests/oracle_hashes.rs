@@ -80,3 +80,8 @@ fn entitysprites_match_original() {
 fn specialcollide_matches_original() {
     check("specialcollide", &["129", "182"]);
 }
+
+#[test]
+fn basements_match_original() {
+    check("basements", &["30", "43", "34", "47"]);
+}

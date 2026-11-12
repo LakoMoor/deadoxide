@@ -134,6 +134,14 @@ impl RoomDef {
             .any(|r| x + w > r.x && x < r.get_x2() && y + h > r.y && y < r.get_y2())
     }
 
+    /// zombie.iso.RoomDef.isAdjacent (RoomDef): some rect of `other`, grown by one square, intersects this room.
+    pub fn is_adjacent(&self, other: &RoomDef) -> bool {
+        other
+            .rects
+            .iter()
+            .any(|r| self.intersects(r.x - 1, r.y - 1, r.w + 2, r.h + 2))
+    }
+
     /// zombie.iso.RoomDef.getArea
     pub fn get_area(&self) -> i32 {
         self.area

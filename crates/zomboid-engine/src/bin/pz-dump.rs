@@ -32,6 +32,7 @@ fn main() {
         Some("collide") if a.len() == 7 => collide(Path::new(&a[2]), &a[3..7]),
         Some("entitysprites") if a.len() == 3 => entitysprites(Path::new(&a[2])),
         Some("specialcollide") if a.len() == 5 => specialcollide(Path::new(&a[2]), &a[3..5]),
+        Some("basements") if a.len() == 7 => basements(Path::new(&a[2]), &a[3..7]),
         _ => Err("usage: see the header of pz-dump.rs".into()),
     };
     match r {
@@ -668,7 +669,7 @@ pub fn collide(root: &Path, range: &[String]) -> Result<String, String> {
         alarm: 1,
         alarm_decay: 1,
     };
-    let mut world = IsoWorld::init(root, "Muldraugh, KY", &|_| false, &alarm, &mut rand)?;
+    let mut world = IsoWorld::init(root, "Muldraugh, KY", &|_| false, &alarm, None, &mut rand)?;
     let mut chunks = Vec::new();
     {
         let IsoWorld {
@@ -757,7 +758,7 @@ pub fn entitysprites(root: &Path) -> Result<String, String> {
         alarm: 1,
         alarm_decay: 1,
     };
-    let world = IsoWorld::init(root, "Muldraugh, KY", &|_| false, &alarm, &mut rand)?;
+    let world = IsoWorld::init(root, "Muldraugh, KY", &|_| false, &alarm, None, &mut rand)?;
     for l in &world.log {
         eprintln!("{l}");
     }
@@ -799,7 +800,7 @@ pub fn specialcollide(root: &Path, cell: &[String]) -> Result<String, String> {
         alarm: 1,
         alarm_decay: 1,
     };
-    let mut world = IsoWorld::init(root, "Muldraugh, KY", &|_| false, &alarm, &mut rand)?;
+    let mut world = IsoWorld::init(root, "Muldraugh, KY", &|_| false, &alarm, None, &mut rand)?;
     let mut chunks = Vec::new();
     {
         let IsoWorld {
@@ -881,6 +882,127 @@ pub fn specialcollide(root: &Path, cell: &[String]) -> Result<String, String> {
             }
         }
         sb.push('\n');
+    }
+    Ok(sb)
+}
+
+/// The meta grid with procedural basements merged in for the oracle seed; pairs with BasementsProbe.java.
+pub fn basements(root: &Path, range: &[String]) -> Result<String, String> {
+    use zomboid_engine::zombie::basements::Basements;
+    let r: Vec<i32> = range
+        .iter()
+        .map(|s| s.parse::<i32>().map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
+    let media = root.join("media");
+    let mut g = IsoMetaGrid::default();
+    let dirs = IsoMetaGrid::lot_directories(&media, "Muldraugh, KY");
+    g.create_step1(&media, &dirs, (-250, -250, 250, 250))?;
+    for e in g.load_all_cells(&mut |_| 1, &mut |_, _| Vec::new()) {
+        eprintln!("{e}");
+    }
+    let alarm = AlarmSettings {
+        last_stand: false,
+        power_grid_exists: true,
+        alarm: 1,
+        alarm_decay: 1,
+    };
+    g.create_step2(&alarm, &mut |_| 1, &mut |a, _| a);
+    // WorldGenParams.setSeedString: the seed is the Java hash of the seed text.
+    let seed = java::string_hash_code("DeadOxideOracle") as i64;
+    let b = Basements::before_load_meta_grid(&media, &mut g, &dirs, seed)?;
+    for l in &b.log {
+        eprintln!("{l}");
+    }
+    let mut sb = String::new();
+    let _ = writeln!(sb, "SEED {seed}");
+    for p in &b.basement_placements {
+        let _ = writeln!(sb, "P {} {} {} {} {} {}", p.name, p.x, p.y, p.z, p.w, p.h);
+    }
+    let mut h: u64 = 0xcbf29ce484222325;
+    for bd in &g.buildings {
+        mix_long(&mut h, g.building(*bd).id);
+    }
+    let _ = writeln!(sb, "B {} {h:x}", g.buildings.len());
+    for cx in r[0]..=r[2] {
+        for cy in r[1]..=r[3] {
+            if g.get_header(cx, cy).is_none() {
+                continue;
+            }
+            let Some(cell) = g.get_cell_data(cx, cy) else {
+                continue;
+            };
+            let _ = writeln!(
+                sb,
+                "C {cx} {cy} {} {}",
+                cell.room_list.len(),
+                cell.buildings.len()
+            );
+            for rr in &cell.room_list {
+                let room = g.room(*rr);
+                let _ = writeln!(
+                    sb,
+                    "R {} {} {} {} {} {} {} {} [{}]",
+                    room.id,
+                    room.meta_id,
+                    room.level,
+                    room.x,
+                    room.y,
+                    room.x2,
+                    room.y2,
+                    room.building.map_or(-1, |b| g.building(b).id),
+                    room.name
+                );
+            }
+            for bd in &cell.buildings {
+                let d = g.building(*bd);
+                let _ = writeln!(
+                    sb,
+                    "D {} {} {} {} {} {} {} {}",
+                    d.id,
+                    d.meta_id,
+                    d.x,
+                    d.y,
+                    d.x2,
+                    d.y2,
+                    d.rooms.len(),
+                    d.emptyoutside.len()
+                );
+            }
+            for ly in 0..32 {
+                for lx in 0..32 {
+                    let Some(ch) = cell.chunk((ly * 32 + lx) as usize) else {
+                        continue;
+                    };
+                    if ch.get_rooms_size() == 0 {
+                        continue;
+                    }
+                    let mut ids: Vec<i64> = ch.rooms().iter().map(|rr| g.room(*rr).id).collect();
+                    ids.sort_unstable();
+                    let _ = write!(sb, "K {cx} {cy} {lx} {ly}");
+                    for id in ids {
+                        let _ = write!(sb, " {id}");
+                    }
+                    sb.push('\n');
+                }
+            }
+            let mut h: u64 = 0xcbf29ce484222325;
+            for z in -32..=8 {
+                for y in cy * 256..cy * 256 + 256 {
+                    for x in cx * 256..cx * 256 + 256 {
+                        mix_long(
+                            &mut h,
+                            g.get_room_at(x, y, z).map_or(-1, |rr| g.room(rr).id),
+                        );
+                        mix_long(
+                            &mut h,
+                            g.get_empty_outside_at(x, y, z)
+                                .map_or(-1, |rr| g.room(rr).id),
+                        );
+                    }
+                }
+            }
+            let _ = writeln!(sb, "H {cx} {cy} {h:x}");
+        }
     }
     Ok(sb)
 }

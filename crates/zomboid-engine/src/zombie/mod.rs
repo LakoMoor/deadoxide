@@ -1,3 +1,4 @@
+pub mod basements;
 pub mod core;
 pub mod game_states;
 pub mod iso;

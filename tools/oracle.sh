@@ -61,4 +61,5 @@ sel chunkobjects && server_case chunkobjects ChunkObjectsProbe 1036 1460 1039 14
 sel collide && server_case collide CollideProbe 1036 1460 1039 1463
 sel entitysprites && server_case entitysprites EntitySpritesProbe
 sel specialcollide && server_case specialcollide SpecialCollideProbe 129 182
+sel basements && server_case basements BasementsProbe 30 43 34 47
 exit $fail

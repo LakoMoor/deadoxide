@@ -1,3 +1,6 @@
+## Procedural basements by direct port (2026-11-13)
+`sh tools/oracle.sh basements` → `OK   basements: 5098 lines identical`: with the same seed the port chooses the same 785 basement layouts and ends with the same rooms, buildings, ids and room lookups as the live server world in the 25 cells checked. Room ids of the port now match a real new world for that seed. Basement squares are not generated yet.
+
 ## Square collision matrices and entity sprite marks by direct port (2026-11-13)
 `sh tools/oracle.sh collide` → `OK   collide: 1315 lines identical`: for every square of the 16 spawn chunks the original's property set and collide/path/vision matrices equal the port's. `sh tools/oracle.sh entitysprites` → `OK   entitysprites: 879 lines identical`: entity script order and sprite marking. The client's movement still uses its older flag grid (`sim::Collision`), not these matrices.
 

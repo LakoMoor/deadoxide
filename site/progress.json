@@ -4,12 +4,13 @@
   "overall": 21.4,
   "note": "Overall and area percentages are subjective weighted estimates, not measured game parity. Facts list the limited measured cases. Full compatibility is unknown.",
   "engine": {
-    "classesTouched": 52,
+    "classesTouched": 59,
     "classes": 3424,
-    "methodsCited": 260,
+    "methodsCited": 277,
     "methods": 46121,
-    "methodPercent": 0.56,
+    "methodPercent": 0.6,
     "oracleCases": [
+      "basements",
       "chunkobjects",
       "collide",
       "entitysprites",
@@ -29,7 +30,7 @@
       "score": 0.5625,
       "how": "share of the game's format families we read (list below); coverage inside each family is also incomplete",
       "facts": [
-        "direct port from decompiled Java: 260 of 46121 method names (0.56%) in 52 of 3424 classes; byte-identical to the original in 8 oracle cases (chunkobjects, collide, entitysprites, lotheaders, lotpack, metagrid, specialcollide, tiledefs)",
+        "direct port from decompiled Java: 277 of 46121 method names (0.6%) in 59 of 3424 classes; byte-identical to the original in 9 oracle cases (basements, chunkobjects, collide, entitysprites, lotheaders, lotpack, metagrid, specialcollide, tiledefs)",
         "format families read: 9 of 16",
         "cell header parsed: 120687 of 123391 bytes",
         "tile names resolved: 25981 of 26063",

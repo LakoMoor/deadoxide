@@ -116,6 +116,39 @@ impl BuildingDef {
         (min_z as i64) << 32 | (min_y as i64) << 16 | min_x as i64
     }
 
+    /// zombie.iso.BuildingDef.getMinLevel: lowest level of the proper rooms, 100 when there are none.
+    pub fn get_min_level(&self, room_list: &[RoomDef]) -> i32 {
+        self.rooms
+            .iter()
+            .map(|r| room_list[r.0 as usize].level)
+            .fold(100, i32::min)
+    }
+    /// zombie.iso.BuildingDef.getMaxLevel: highest level of the proper rooms, -100 when there are none.
+    pub fn get_max_level(&self, room_list: &[RoomDef]) -> i32 {
+        self.rooms
+            .iter()
+            .map(|r| room_list[r.0 as usize].level)
+            .fold(-100, i32::max)
+    }
+    /// zombie.iso.BuildingDef.getW
+    pub fn get_w(&self) -> i32 {
+        self.x2 - self.x
+    }
+    /// zombie.iso.BuildingDef.getH
+    pub fn get_h(&self) -> i32 {
+        self.y2 - self.y
+    }
+    /// zombie.iso.BuildingDef.isAdjacent (BuildingDef): two rooms on the same level whose rects touch or overlap.
+    pub fn is_adjacent(&self, other: &BuildingDef, room_list: &[RoomDef]) -> bool {
+        self.rooms.iter().any(|a| {
+            let a = &room_list[a.0 as usize];
+            other.rooms.iter().any(|b| {
+                let b = &room_list[b.0 as usize];
+                a.level == b.level && a.is_adjacent(b)
+            })
+        })
+    }
+
     /// zombie.iso.BuildingDef.overlapsChunk
     pub fn overlaps_chunk(&self, wx: i32, wy: i32) -> bool {
         self.overlapped_chunks

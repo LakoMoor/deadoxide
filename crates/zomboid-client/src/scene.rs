@@ -132,6 +132,10 @@ fn sprite_collision_flags(world: &IsoWorld, spr: SpriteRef) -> u16 {
     })
 }
 
+/// World seed used until the client reads `map_worldgen.bin` of a save or creates worlds itself: the Java hash of
+/// the oracle's seed text "DeadOxideOracle", so basements match the reference server world.
+const WORLD_SEED: i64 = -1594728997;
+
 struct RegionGrid<'a>(std::collections::HashMap<(i32, i32, i32), &'a IsoGridSquare>);
 impl GetSquare for RegionGrid<'_> {
     fn get_grid_square(&self, x: i32, y: i32, z: i32) -> Option<&IsoGridSquare> {
@@ -151,8 +155,15 @@ pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Sc
         alarm: 4,
         alarm_decay: 1,
     };
-    let mut world = IsoWorld::init(root, "Muldraugh, KY", &|_| true, &alarm, &mut rand)
-        .map_err(|e| anyhow!(e))?;
+    let mut world = IsoWorld::init(
+        root,
+        "Muldraugh, KY",
+        &|_| true,
+        &alarm,
+        Some(WORLD_SEED),
+        &mut rand,
+    )
+    .map_err(|e| anyhow!(e))?;
     for l in &world.log {
         log::warn!("{l}");
     }
