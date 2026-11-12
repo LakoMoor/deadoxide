@@ -510,25 +510,38 @@ pub fn chunkobjects(root: &Path, range: &[String]) -> Result<String, String> {
     };
     g.create_step2(&alarm, &mut |_| 1, &mut |a, _| a);
     let mut rand = RandAbstract::new(java::Random::new(12345));
+    // LockedHouses is 6 in the dedicated server's default sandbox preset, which the probe runs under.
     let mut ctx = LoadContext {
         sprites: &mut sm,
         alias: &alias,
         glass_removed_window_sprite_map: &defs.glass_removed_window_sprite_map,
         smashed_window_sprite_map: &defs.smashed_window_sprite_map,
-        meta_grid: &g,
+        meta_grid: &mut g,
         rand: &mut rand,
         locked_houses: 6,
         missing_tiles: Vec::new(),
     };
     let mut sb = String::new();
     let _ = writeln!(sb, "O lockedHouses={}", ctx.locked_houses);
+    let b = |v: bool| if v { 1 } else { 0 };
     for wx in r[0]..=r[2] {
         for wy in r[1]..=r[3] {
+            *ctx.rand = RandAbstract::new(java::Random::new(12345));
             let mut ch = IsoChunk::new(wx, wy);
             let mut errors = Vec::new();
             let ok = cell_loader::load_cell_binary_chunk(&mut ctx, wx, wy, &mut ch, &mut errors);
             for e in errors {
                 eprintln!("chunk {wx},{wy}: {e}");
+            }
+            let mut taint = false;
+            for z in ch.get_min_level()..=ch.get_max_level() {
+                for i in 0..64 {
+                    if let Some(sq) = ch.get_grid_square(i % 8, i / 8, z) {
+                        taint |= sq.objects.iter().any(|o| {
+                            matches!(o.kind, ObjectKind::IsoRadio | ObjectKind::IsoTelevision)
+                        });
+                    }
+                }
             }
             let _ = writeln!(
                 sb,
@@ -558,8 +571,10 @@ pub fn chunkobjects(root: &Path, range: &[String]) -> Result<String, String> {
                             if o.render_y_offset != 0.0 {
                                 let _ = write!(sb, "@{:x}", o.render_y_offset.to_bits());
                             }
-                            let b = |v: bool| if v { 1 } else { 0 };
                             match &o.kind {
+                                ObjectKind::IsoDoor(d) if taint => {
+                                    let _ = write!(sb, "{{o{}n{}?}}", b(d.open), b(d.north));
+                                }
                                 ObjectKind::IsoDoor(d) => {
                                     let _ = write!(
                                         sb,
@@ -568,6 +583,15 @@ pub fn chunkobjects(root: &Path, range: &[String]) -> Result<String, String> {
                                         b(d.north),
                                         b(d.locked),
                                         b(d.locked_by_key)
+                                    );
+                                }
+                                ObjectKind::IsoWindow(w) if taint => {
+                                    let _ = write!(
+                                        sb,
+                                        "{{n{}?p{}s{}}}",
+                                        b(w.north),
+                                        b(w.perma_locked),
+                                        b(w.smashed)
                                     );
                                 }
                                 ObjectKind::IsoWindow(w) => {
@@ -591,24 +615,30 @@ pub fn chunkobjects(root: &Path, range: &[String]) -> Result<String, String> {
                                     .properties
                                     .has(IsoFlagType::vegitation)
                             }) {
-                                let _ = write!(
-                                    sb,
-                                    "{{t{:x},{:x},{:x}}}",
-                                    o.tintr.to_bits(),
-                                    o.tintg.to_bits(),
-                                    o.tintb.to_bits()
-                                );
+                                if taint {
+                                    sb.push_str("{t?}");
+                                } else {
+                                    let _ = write!(
+                                        sb,
+                                        "{{t{:x},{:x},{:x}}}",
+                                        o.tintr.to_bits(),
+                                        o.tintg.to_bits(),
+                                        o.tintb.to_bits()
+                                    );
+                                }
                             }
                         }
                         sb.push('\n');
                     }
                 }
             }
+            if !taint {
+                let _ = writeln!(sb, "X {}", ctx.rand.next(1000000));
+            }
         }
     }
     for t in &ctx.missing_tiles {
         eprintln!("Missing tile definition: {t}");
     }
-    let _ = writeln!(sb, "X {}", ctx.rand.next(1000000));
     Ok(sb)
 }

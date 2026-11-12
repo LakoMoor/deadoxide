@@ -55,5 +55,7 @@ sel lotpack && run_case lotpack LotPackProbe "Muldraugh, KY" 30 43 34 47
 [ "$want" = lotpack-all ] && run_case lotpack LotPackProbe "Muldraugh, KY" 0 0 99 99
 sel metagrid && server_case metagrid MetaGridProbe "Muldraugh, KY" 30 43 34 47
 # not in the default run until it matches (first gap: one Rand draw for crafted_01_29, a water-collector entity)
-[ "$want" = chunkobjects ] && server_case chunkobjects ChunkObjectsProbe 1036 1460 1039 1463
+sel chunkobjects && server_case chunkobjects ChunkObjectsProbe 1036 1460 1039 1463
+# a whole cell (1,024 chunks): sh tools/oracle.sh chunkobjects-cell
+[ "$want" = chunkobjects-cell ] && server_case chunkobjects ChunkObjectsProbe 1024 1440 1055 1471
 exit $fail

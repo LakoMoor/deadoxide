@@ -1,3 +1,6 @@
+## Chunk objects by direct port (2026-11-13)
+`ChunkObjectsProbe` runs `CellLoader.LoadCellBinaryChunk` inside the booted original with a seeded `java.util.Random` as `Rand`; `pz-dump chunkobjects` does the same through the port. `sh tools/oracle.sh chunkobjects` → `OK   chunkobjects: 1347 lines identical` (16 chunks around the Rosewood spawn house). Whole cell 32_45: 2 of 84,711 lines differ, traced with `-Doracle.trace=1` to two draws in `FluidContainerScript.getInitialAmount` in one chunk. What is and is not compared is listed under E5 in `docs/PORT.md`. The window client still builds its scene with the older `zomboid-content` readers.
+
 ## Meta grid by direct port (2026-11-12)
 `MetaGridProbe` runs inside the booted original (`ServerHarness`), builds a fresh grid with the original `IsoMetaGrid.Create()` and prints the building list hash, adjacent-cell flags, per-chunk room ids and a per-cell hash of room lookups; `pz-dump metagrid .. "Muldraugh, KY" 30 43 34 47` does the same through the port. `sh tools/oracle.sh metagrid` → `OK   metagrid: 1548 lines identical`. The building list order (Java `HashMap` iteration over 4,065 header names) is reproduced. The live world's grid additionally contains basements, which are not ported: room ids of houses with basements therefore still differ from a real save.
 

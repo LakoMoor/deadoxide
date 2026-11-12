@@ -29,7 +29,7 @@ pub struct LoadContext<'a, R: JavaRandom> {
     pub glass_removed_window_sprite_map: &'a HashMap<SpriteRef, SpriteRef>,
     /// `CellLoader.smashedWindowSpriteMap`
     pub smashed_window_sprite_map: &'a HashMap<SpriteRef, SpriteRef>,
-    pub meta_grid: &'a IsoMetaGrid,
+    pub meta_grid: &'a mut IsoMetaGrid,
     /// `Rand` (RandStandard)
     pub rand: &'a mut RandAbstract<R>,
     /// `SandboxOptions.instance.lockedHouses.getValue()` (1..6, default 4)
@@ -363,35 +363,75 @@ pub fn do_tile_object_creation<R: JavaRandom>(
                     false,
                 ))
             };
-            if has_container && (c("barbecue")? || c("barbecuepropane")?) {
-                obj = simple(ctx, sq, ObjectKind::IsoBarbecue);
-            } else if has_container && c("fireplace")? {
-                obj = simple(ctx, sq, ObjectKind::IsoFireplace);
-            } else if {
+            // The container-driven classes, tested in the original's order.
+            let iso_type_cwd = ctx.sprites.sprite(spr).properties.get(alias, pt::ISO_TYPE)
+                == Some("IsoCombinationWasherDryer");
+            let container_kind = (|| -> Result<Option<ObjectKind>, String> {
+                if has_container && (c("barbecue")? || c("barbecuepropane")?) {
+                    return Ok(Some(ObjectKind::IsoBarbecue {
+                        has_propane_tank: false,
+                        fuel_amount_minutes: 0,
+                    }));
+                }
+                if has_container && c("fireplace")? {
+                    return Ok(Some(ObjectKind::IsoFireplace));
+                }
                 let n = spr_name
                     .as_deref()
                     .ok_or("java.lang.NullPointerException: spr.getName()")?;
-                n != "camping_01_04"
+                if n != "camping_01_04"
                     && n != "camping_01_05"
                     && n != "camping_01_06"
                     && has_container
                     && c("campfire")?
-            } {
-                obj = simple(ctx, sq, ObjectKind::IsoFireplace);
-            } else if container_is("brazier") {
-                obj = simple(ctx, sq, ObjectKind::IsoFireplace);
-            } else if ctx.sprites.sprite(spr).properties.get(alias, pt::ISO_TYPE)
-                == Some("IsoCombinationWasherDryer")
-            {
-                obj = simple(ctx, sq, ObjectKind::IsoCombinationWasherDryer);
-            } else if has_container && c("clothingdryer")? {
-                obj = simple(ctx, sq, ObjectKind::IsoClothingDryer);
-            } else if has_container && c("clothingwasher")? {
-                obj = simple(ctx, sq, ObjectKind::IsoClothingWasher);
-            } else if has_container && c("woodstove")? {
-                obj = simple(ctx, sq, ObjectKind::IsoFireplace);
-            } else if has_container && (is_stove || c("microwave")?) {
-                obj = simple(ctx, sq, ObjectKind::IsoStove);
+                {
+                    return Ok(Some(ObjectKind::IsoFireplace));
+                }
+                if container_is("brazier") {
+                    return Ok(Some(ObjectKind::IsoFireplace));
+                }
+                if iso_type_cwd {
+                    return Ok(Some(ObjectKind::IsoCombinationWasherDryer));
+                }
+                if has_container && c("clothingdryer")? {
+                    return Ok(Some(ObjectKind::IsoClothingDryer));
+                }
+                if has_container && c("clothingwasher")? {
+                    return Ok(Some(ObjectKind::IsoClothingWasher));
+                }
+                if has_container && c("woodstove")? {
+                    return Ok(Some(ObjectKind::IsoFireplace));
+                }
+                if has_container && (is_stove || c("microwave")?) {
+                    return Ok(Some(ObjectKind::IsoStove));
+                }
+                Ok(None)
+            })()?;
+            if let Some(mut kind) = container_kind {
+                if let ObjectKind::IsoBarbecue {
+                    has_propane_tank,
+                    fuel_amount_minutes,
+                } = &mut kind
+                {
+                    // zombie.iso.objects.IsoBarbecue constructor: a propane barbecue starts with a random amount of fuel.
+                    // isSpriteWithPropaneTank: this sprite and the one 8 tiles further both carry "propaneTank".
+                    let with_tank = ctx
+                        .sprites
+                        .sprite(spr)
+                        .properties
+                        .has_str(alias, pt::PROPANE_TANK)
+                        && get_sprite_offset(ctx.sprites, spr, 8)?.is_some_and(|s2| {
+                            ctx.sprites
+                                .sprite(s2)
+                                .properties
+                                .has_str(alias, pt::PROPANE_TANK)
+                        });
+                    if with_tank {
+                        *has_propane_tank = true;
+                        *fuel_amount_minutes = ctx.rand.next(1201);
+                    }
+                }
+                obj = simple(ctx, sq, kind);
             } else if ty == T::jukebox {
                 let i = simple(ctx, sq, ObjectKind::IsoJukebox);
                 if let Some(i) = i {
@@ -583,8 +623,8 @@ pub fn load_cell_binary_chunk<R: JavaRandom>(
     let cell_y = pz_math::fastfloor(wy as f32 / 32.0);
     let filenamepack = format!("world_{cell_x}_{cell_y}.lotpack");
     let header_name = format!("{cell_x}_{cell_y}.lotheader");
-    let grid = ctx.meta_grid;
-    let Some(first) = grid
+    let Some(first) = ctx
+        .meta_grid
         .map_files
         .iter()
         .position(|m| m.info_file_names.contains_key(&filenamepack))
@@ -594,46 +634,55 @@ pub fn load_cell_binary_chunk<R: JavaRandom>(
     let mut b_done_squares = [false; 64];
     let mut lot = IsoLot::default();
     let mut placed_first = false;
-    for i in first..grid.map_files.len() {
-        let map_files = &grid.map_files[i];
-        if placed_first && !map_files.has_cell(cell_x, cell_y) {
+    for i in first..ctx.meta_grid.map_files.len() {
+        if placed_first && !ctx.meta_grid.map_files[i].has_cell(cell_x, cell_y) {
             continue;
         }
-        let (Some(path), Some(info)) = (
-            map_files.info_file_names.get(&filenamepack),
-            map_files.info_headers.get(&header_name),
-        ) else {
+        let path = ctx.meta_grid.map_files[i]
+            .info_file_names
+            .get(&filenamepack)
+            .cloned();
+        // The header leaves the grid while the chunk is placed, because placing creates runtime rooms in the grid.
+        let info = ctx.meta_grid.map_files[i].info_headers.remove(&header_name);
+        let (Some(path), Some(info)) = (path, info) else {
             if !placed_first {
                 // `lot.info == null`: the original returns true without placing anything.
                 return true;
             }
             continue;
         };
-        let Ok(pack) = std::fs::read(path) else {
+        let pack = std::fs::read(&path);
+        if let Ok(pack) = &pack {
+            if let Some(e) = lot.load(&info, pack, cell_x, cell_y, wx, wy) {
+                errors.push(e);
+            }
+            let (non_empty_square_count, err) = iso_cell::place_lot(
+                ctx,
+                &lot,
+                &info,
+                0,
+                0,
+                lot.min_level,
+                chunk,
+                wx,
+                wy,
+                &mut b_done_squares,
+            );
+            errors.extend(err);
+            ctx.meta_grid.map_files[i]
+                .info_headers
+                .insert(header_name.clone(), info);
+            placed_first = true;
+            if non_empty_square_count == 64 {
+                break;
+            }
+        } else {
+            ctx.meta_grid.map_files[i]
+                .info_headers
+                .insert(header_name.clone(), info);
             if !placed_first {
                 return false;
             }
-            continue;
-        };
-        if let Some(e) = lot.load(info, &pack, cell_x, cell_y, wx, wy) {
-            errors.push(e);
-        }
-        let (non_empty_square_count, err) = iso_cell::place_lot(
-            ctx,
-            &lot,
-            info,
-            0,
-            0,
-            lot.min_level,
-            chunk,
-            wx,
-            wy,
-            &mut b_done_squares,
-        );
-        errors.extend(err);
-        placed_first = true;
-        if non_empty_square_count == 64 {
-            break;
         }
     }
     true

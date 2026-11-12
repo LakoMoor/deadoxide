@@ -14,6 +14,10 @@ pub struct IsoGridSquare {
     pub y: i32,
     pub z: i32,
     pub room_id: i64,
+    /// zombie.iso.IsoGridSquare.room: index into `IsoMetaGrid::iso_rooms`.
+    pub room: Option<usize>,
+    /// zombie.iso.IsoGridSquare.roofHideBuilding: index into `IsoMetaGrid::iso_buildings`.
+    pub roof_hide_building: Option<usize>,
     pub objects: Vec<IsoObject>,
 }
 
@@ -25,6 +29,8 @@ impl IsoGridSquare {
             y,
             z,
             room_id: -1,
+            room: None,
+            roof_hide_building: None,
             objects: Vec::new(),
         }
     }

@@ -22,6 +22,23 @@ pub struct RoomRef(pub u32);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct BuildingRef(pub u32);
 
+/// zombie.iso.areas.IsoRoom: the runtime room made from a `RoomDef` the first time a square of it is loaded.
+#[derive(Clone, Debug, PartialEq)]
+pub struct IsoRoom {
+    pub def: RoomRef,
+    /// Index into `IsoMetaGrid::iso_buildings`.
+    pub building: usize,
+}
+
+/// zombie.iso.areas.IsoBuilding: the runtime building; `rooms` are indices into `IsoMetaGrid::iso_rooms`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct IsoBuilding {
+    pub id: i32,
+    pub score_update: i32,
+    pub def: BuildingRef,
+    pub rooms: Vec<usize>,
+}
+
 /// The sandbox values `CreateStep2` reads when it decides which buildings are alarmed.
 #[derive(Clone, Copy, Debug)]
 pub struct AlarmSettings {
@@ -55,6 +72,12 @@ pub struct IsoMetaGrid {
     pub building_defs: Vec<BuildingDef>,
     /// zombie.iso.IsoMetaGrid.buildings
     pub buildings: Vec<BuildingRef>,
+    pub iso_rooms: Vec<IsoRoom>,
+    pub iso_buildings: Vec<IsoBuilding>,
+    /// zombie.iso.IsoMetaCell.isoRooms of all cells (room ids carry their cell).
+    pub iso_room_by_id: std::collections::HashMap<i64, usize>,
+    /// zombie.iso.IsoMetaCell.isoBuildings of all cells.
+    pub iso_building_by_id: std::collections::HashMap<i64, usize>,
 }
 
 impl IsoMetaGrid {
@@ -609,6 +632,75 @@ impl IsoMetaGrid {
                 }
             }
         }
+    }
+
+    /// zombie.iso.IsoMetaGrid.getRoomByID: the runtime room for a room id, created on first use together with its
+    /// building and, through `IsoBuilding.CreateFrom`, the building's other rooms. A new `IsoBuilding` draws
+    /// `Rand.Next(120)` once (`rand_next`). Returns an index into `iso_rooms`.
+    pub fn get_room_by_id(
+        &mut self,
+        room_id: i64,
+        rand_next: &mut dyn FnMut(i32) -> i32,
+    ) -> Option<usize> {
+        let (cell_x, cell_y) = (room_id::get_cell_x(room_id), room_id::get_cell_y(room_id));
+        let r = *self.get_cell_data(cell_x, cell_y)?.rooms.get(&room_id)?;
+        if let Some(i) = self.iso_room_by_id.get(&room_id) {
+            return Some(*i);
+        }
+        let b = match self.room_defs[r.0 as usize].building {
+            Some(b) => b,
+            None => {
+                let mut def = BuildingDef {
+                    id: building_id::make_id(cell_x, cell_y, self.buildings.len() as i32),
+                    ..BuildingDef::default()
+                };
+                def.rooms.push(r);
+                def.calculate_bounds(&self.room_defs);
+                def.meta_id = def.calculate_meta_id(&self.room_defs, cell_x, cell_y);
+                let b = BuildingRef(self.building_defs.len() as u32);
+                self.building_defs.push(def);
+                self.room_defs[r.0 as usize].building = Some(b);
+                self.buildings.push(b);
+                b
+            }
+        };
+        let building_id = self.building_defs[b.0 as usize].id;
+        let room = self.iso_rooms.len();
+        self.iso_rooms.push(IsoRoom {
+            def: r,
+            building: usize::MAX,
+        });
+        self.iso_room_by_id.insert(room_id, room);
+        match self.iso_building_by_id.get(&building_id).copied() {
+            None => {
+                let ib = self.iso_buildings.len();
+                // zombie.iso.areas.IsoBuilding constructor
+                self.iso_buildings.push(IsoBuilding {
+                    id: ib as i32,
+                    score_update: -120 + rand_next(120),
+                    def: b,
+                    rooms: Vec::new(),
+                });
+                self.iso_rooms[room].building = ib;
+                self.iso_building_by_id.insert(building_id, ib);
+                // zombie.iso.areas.IsoBuilding.CreateFrom
+                for n in 0..self.building_defs[b.0 as usize].rooms.len() {
+                    let other = self.building_defs[b.0 as usize].rooms[n];
+                    let other_id = self.room_defs[other.0 as usize].id;
+                    if let Some(rr) = self.get_room_by_id(other_id, rand_next) {
+                        self.iso_rooms[rr].building = ib;
+                        if !self.iso_buildings[ib].rooms.contains(&rr) {
+                            self.iso_buildings[ib].rooms.push(rr);
+                        }
+                    }
+                }
+            }
+            Some(ib) => {
+                self.iso_rooms[room].building = ib;
+                self.iso_buildings[ib].rooms.push(room);
+            }
+        }
+        Some(room)
     }
 
     /// zombie.iso.IsoMetaGrid.getChunkData: the meta chunk if it exists. The original creates it on demand; a chunk

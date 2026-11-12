@@ -131,9 +131,33 @@ fn place_lot_inner<R: JavaRandom>(
                     .meta_grid
                     .get_room_at(x, y, z)
                     .map_or(-1, |r| ctx.meta_grid.room(r).id);
+                // zombie.iso.IsoGridSquare.setRoomID: instantiates the runtime room (and building) on first contact.
+                let room = if room_id != -1 {
+                    let rand = &mut *ctx.rand;
+                    ctx.meta_grid.get_room_by_id(room_id, &mut |n| rand.next(n))
+                } else {
+                    None
+                };
+                // An "emptyoutside" room over the square (a porch, a roofed yard) names the building whose roof hides it.
+                let roof_hide_building = match ctx
+                    .meta_grid
+                    .get_empty_outside_at(x, y, z)
+                    .map(|r| ctx.meta_grid.room(r).id)
+                {
+                    Some(id) => {
+                        let rand = &mut *ctx.rand;
+                        ctx.meta_grid
+                            .get_room_by_id(id, &mut |n| rand.next(n))
+                            .map(|r| ctx.meta_grid.iso_rooms[r].building)
+                    }
+                    None => None,
+                };
                 let square = ch.get_grid_square_mut(x - wx, y - wy, z).ok_or("square")?;
                 square.room_id = room_id;
-                // roofHideBuilding (from getEmptyOutsideAt) needs IsoRoom, which is not ported yet.
+                square.room = room;
+                if roof_hide_building.is_some() {
+                    square.roof_hide_building = roof_hide_building;
+                }
 
                 let b_clear_objects = true;
                 for n in 0..num_ints {

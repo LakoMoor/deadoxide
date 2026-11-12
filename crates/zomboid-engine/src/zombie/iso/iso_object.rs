@@ -51,7 +51,9 @@ pub enum ObjectKind {
     IsoObject,
     IsoDoor(IsoDoor),
     IsoWindow(IsoWindow),
-    IsoWindowFrame { north: bool },
+    IsoWindowFrame {
+        north: bool,
+    },
     IsoCurtain(IsoCurtain),
     IsoLightSwitch,
     IsoFireplace,
@@ -59,7 +61,11 @@ pub enum ObjectKind {
     IsoClothingDryer,
     IsoClothingWasher,
     IsoStove,
-    IsoBarbecue,
+    /// zombie.iso.objects.IsoBarbecue
+    IsoBarbecue {
+        has_propane_tank: bool,
+        fuel_amount_minutes: i32,
+    },
     IsoJukebox,
     IsoRadio,
     IsoTelevision,
@@ -82,7 +88,7 @@ impl ObjectKind {
             ObjectKind::IsoClothingDryer => "IsoClothingDryer",
             ObjectKind::IsoClothingWasher => "IsoClothingWasher",
             ObjectKind::IsoStove => "IsoStove",
-            ObjectKind::IsoBarbecue => "IsoBarbecue",
+            ObjectKind::IsoBarbecue { .. } => "IsoBarbecue",
             ObjectKind::IsoJukebox => "IsoJukebox",
             ObjectKind::IsoRadio => "IsoRadio",
             ObjectKind::IsoTelevision => "IsoTelevision",
