@@ -11,11 +11,12 @@ use zomboid_engine::zombie::core::random::rand_abstract::RandAbstract;
 use zomboid_engine::zombie::core::tile_property_alias_map::TilePropertyAliasMap;
 use zomboid_engine::zombie::iso::cell_loader::{self, LoadContext};
 use zomboid_engine::zombie::iso::iso_chunk::IsoChunk;
+use zomboid_engine::zombie::iso::iso_grid_square::{GetSquare, IsoGridSquare};
 use zomboid_engine::zombie::iso::iso_lot::IsoLot;
 use zomboid_engine::zombie::iso::iso_meta_grid::{AlarmSettings, IsoMetaGrid};
 use zomboid_engine::zombie::iso::iso_object::ObjectKind;
 use zomboid_engine::zombie::iso::iso_world::{
-    self, TileDefinitions, VANILLA_TILE_DEFINITION_FILES,
+    self, IsoWorld, TileDefinitions, VANILLA_TILE_DEFINITION_FILES,
 };
 use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::IsoSpriteManager;
 use zomboid_engine::zombie::iso::sprite_details::iso_flag_type::IsoFlagType;
@@ -28,6 +29,8 @@ fn main() {
         Some("lotpack") if a.len() == 8 => lotpack(Path::new(&a[2]), &a[3], &a[4..8]),
         Some("metagrid") if a.len() == 8 => metagrid(Path::new(&a[2]), &a[3], &a[4..8]),
         Some("chunkobjects") if a.len() == 7 => chunkobjects(Path::new(&a[2]), &a[3..7]),
+        Some("collide") if a.len() == 7 => collide(Path::new(&a[2]), &a[3..7]),
+        Some("entitysprites") if a.len() == 3 => entitysprites(Path::new(&a[2])),
         _ => Err("usage: see the header of pz-dump.rs".into()),
     };
     match r {
@@ -640,6 +643,144 @@ pub fn chunkobjects(root: &Path, range: &[String]) -> Result<String, String> {
     }
     for t in &ctx.missing_tiles {
         eprintln!("Missing tile definition: {t}");
+    }
+    Ok(sb)
+}
+
+struct ChunkGrid<'a>(std::collections::HashMap<(i32, i32, i32), &'a IsoGridSquare>);
+impl GetSquare for ChunkGrid<'_> {
+    fn get_grid_square(&self, x: i32, y: i32, z: i32) -> Option<&IsoGridSquare> {
+        self.0.get(&(x, y, z)).copied()
+    }
+}
+
+/// Square properties and collide/path/vision matrices of a chunk range; pairs with CollideProbe.java.
+pub fn collide(root: &Path, range: &[String]) -> Result<String, String> {
+    let r: Vec<i32> = range
+        .iter()
+        .map(|s| s.parse::<i32>().map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
+    let mut rand = RandAbstract::new(java::Random::new(12345));
+    let alarm = AlarmSettings {
+        last_stand: false,
+        power_grid_exists: true,
+        alarm: 1,
+        alarm_decay: 1,
+    };
+    let mut world = IsoWorld::init(root, "Muldraugh, KY", &|_| false, &alarm, &mut rand)?;
+    let mut chunks = Vec::new();
+    {
+        let IsoWorld {
+            sprites,
+            alias,
+            tile_definitions,
+            meta_grid,
+            ..
+        } = &mut world;
+        let mut ctx = LoadContext {
+            sprites,
+            alias,
+            glass_removed_window_sprite_map: &tile_definitions.glass_removed_window_sprite_map,
+            smashed_window_sprite_map: &tile_definitions.smashed_window_sprite_map,
+            meta_grid,
+            rand: &mut rand,
+            locked_houses: 6,
+            missing_tiles: Vec::new(),
+            lotpack_cache: None,
+        };
+        for wx in r[0]..=r[2] {
+            for wy in r[1]..=r[3] {
+                *ctx.rand = RandAbstract::new(java::Random::new(12345));
+                let mut ch = IsoChunk::new(wx, wy);
+                cell_loader::load_cell_binary_chunk(&mut ctx, wx, wy, &mut ch, &mut Vec::new());
+                chunks.push(ch);
+            }
+        }
+    }
+    for ch in &mut chunks {
+        for z in ch.get_min_level()..=ch.get_max_level() {
+            for i in 0..64 {
+                if let Some(sq) = ch.get_grid_square_mut(i % 8, i / 8, z) {
+                    sq.recalc_properties(&world.sprites);
+                }
+            }
+        }
+    }
+    let mut all = Vec::new();
+    for ch in &chunks {
+        for z in ch.get_min_level()..=ch.get_max_level() {
+            for y in 0..8 {
+                for x in 0..8 {
+                    all.extend(ch.get_grid_square(x, y, z));
+                }
+            }
+        }
+    }
+    let grid = ChunkGrid(all.iter().map(|s| ((s.x, s.y, s.z), *s)).collect());
+    let mut sb = String::new();
+    for sq in &all {
+        let flags: Vec<&str> = sq
+            .properties
+            .get_flags_list()
+            .iter()
+            .map(|f| f.name())
+            .collect();
+        let _ = write!(
+            sb,
+            "Q {} {} {} {} {} ",
+            sq.x,
+            sq.y,
+            sq.z,
+            if sq.have_roof { 1 } else { 0 },
+            flags.join(",")
+        );
+        for k in sq.properties.get_property_names(&world.alias) {
+            let _ = write!(
+                sb,
+                "{k}={};",
+                sq.properties.get(&world.alias, k).unwrap_or("null")
+            );
+        }
+        let (c, p, v) = sq.calculate_matrices(&world.alias, &grid);
+        let _ = writeln!(sb, " {:x} {c:x} {p:x} {v:x}", sq.has_types);
+    }
+    Ok(sb)
+}
+
+/// Entity scripts in ScriptManager order and the sprites they mark; pairs with EntitySpritesProbe.java.
+pub fn entitysprites(root: &Path) -> Result<String, String> {
+    let mut rand = RandAbstract::new(java::Random::new(12345));
+    let alarm = AlarmSettings {
+        last_stand: false,
+        power_grid_exists: true,
+        alarm: 1,
+        alarm_decay: 1,
+    };
+    let world = IsoWorld::init(root, "Muldraugh, KY", &|_| false, &alarm, &mut rand)?;
+    for l in &world.log {
+        eprintln!("{l}");
+    }
+    let mut sb = String::new();
+    for e in &world.scripts.entities {
+        let _ = writeln!(sb, "E {}", e.name);
+    }
+    let mut names: Vec<&String> = world.sprites.named_map.keys().collect();
+    names.sort_unstable();
+    for n in names {
+        let p = &world.sprites.sprite(world.sprites.named_map[n]).properties;
+        let name = p.get(&world.alias, "EntityScriptName");
+        if p.has(IsoFlagType::EntityScript) || name.is_some() {
+            let _ = writeln!(
+                sb,
+                "S {n} {} {}",
+                if p.has(IsoFlagType::EntityScript) {
+                    1
+                } else {
+                    0
+                },
+                name.unwrap_or("null")
+            );
+        }
     }
     Ok(sb)
 }

@@ -57,6 +57,15 @@ impl EventRuntime {
         Ok(())
     }
 
+    pub fn set_fishing_population(&self, population: crate::fishing::FishPopulation) -> Result<()> {
+        let fishing = self.fishing.borrow();
+        let state = fishing
+            .as_ref()
+            .ok_or_else(|| mlua::Error::runtime("fishing save not loaded"))?;
+        state.borrow_mut().population = Some(population);
+        Ok(())
+    }
+
     /// Attach a caller-supplied original RNG. All consumers must share its stream.
     pub fn set_fishing_rng(&self, rng: zomboid_content::rng::CellularRng) -> Result<()> {
         let fishing = self.fishing.borrow();

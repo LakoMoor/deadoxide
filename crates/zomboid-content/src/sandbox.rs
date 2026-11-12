@@ -23,7 +23,7 @@ pub fn day_length_minutes(option: u8) -> Option<u32> {
 
 /// zombie.SandboxOptions.load: read the DayLength entry from the measured version-249 prefix.
 /// Other options and the trailing data are skipped, not interpreted or fully validated.
-pub fn parse_day_length(bytes: &[u8]) -> Result<SavedDayLength, String> {
+fn parse_option(bytes: &[u8], option_name: &[u8]) -> Result<u8, String> {
     if bytes.len() < 16 || &bytes[..4] != b"SAND" {
         return Err("invalid or truncated sandbox header".into());
     }
@@ -56,17 +56,31 @@ pub fn parse_day_length(bytes: &[u8]) -> Result<SavedDayLength, String> {
     for _ in 0..count {
         let key = read_string(&mut offset)?;
         let value = read_string(&mut offset)?;
-        if key == b"DayLength" {
+        if key == option_name {
             if option.is_some() {
-                return Err("duplicate DayLength option".into());
+                return Err("duplicate sandbox option".into());
             }
-            let value = std::str::from_utf8(value).map_err(|_| "non-ASCII DayLength")?;
-            option = Some(value.parse::<u8>().map_err(|_| "invalid DayLength value")?);
+            let value = std::str::from_utf8(value).map_err(|_| "non-ASCII sandbox value")?;
+            option = Some(value.parse::<u8>().map_err(|_| "invalid sandbox value")?);
         }
     }
-    let option = option.ok_or("missing DayLength option")?;
+    option.ok_or("missing sandbox option".into())
+}
+
+/// zombie.SandboxOptions.load: read the measured day length.
+pub fn parse_day_length(bytes: &[u8]) -> Result<SavedDayLength, String> {
+    let option = parse_option(bytes, b"DayLength")?;
     let minutes = day_length_minutes(option).ok_or("unsupported DayLength value")?;
     Ok(SavedDayLength { option, minutes })
+}
+
+/// zombie.SandboxOptions.load: read the FishAbundance enum used by fish points.
+pub fn parse_fish_abundance(bytes: &[u8]) -> Result<u8, String> {
+    let value = parse_option(bytes, b"FishAbundance")?;
+    if !(1..=5).contains(&value) {
+        return Err("unsupported FishAbundance value".into());
+    }
+    Ok(value)
 }
 
 pub fn load_day_length(path: &Path) -> Result<SavedDayLength, String> {
@@ -85,6 +99,35 @@ mod tests {
         }
         data
     }
+    #[test]
+    fn parses_fish_abundance_option() {
+        let mut data = b"SAND\0\0\0\xf9\0\0\0\x06\0\0\0\x01".to_vec();
+        for field in ["FishAbundance", "2"] {
+            data.extend_from_slice(&(field.len() as u16).to_be_bytes());
+            data.extend_from_slice(field.as_bytes());
+        }
+        assert_eq!(parse_fish_abundance(&data).unwrap(), 2);
+        assert!(parse_fish_abundance(&data[..data.len() - 1]).is_err());
+        *data.last_mut().unwrap() = b'9';
+        assert!(parse_fish_abundance(&data).is_err());
+    }
+
+    #[test]
+    #[ignore = "requires the user's isolated original-game save"]
+    fn real_fish_abundance_matches_original() {
+        let path = Path::new("../../profile/Saves/Sandbox/2026-11-07_22-34-13/map_sand.bin");
+        let bytes = std::fs::read(path).expect("isolated original save");
+        let expected: u8 = include_str!("../../../tests/golden/fishing_sandbox.txt")
+            .lines()
+            .next()
+            .unwrap()
+            .strip_prefix("FISH_OPTION saved=")
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(parse_fish_abundance(&bytes).unwrap(), expected);
+    }
+
     #[test]
     fn day_length_matches_original_oracle() {
         let fixture = include_str!("../../../tests/golden/sandbox_day_length.txt");

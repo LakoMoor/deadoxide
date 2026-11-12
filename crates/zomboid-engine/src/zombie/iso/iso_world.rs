@@ -906,6 +906,7 @@ pub struct IsoWorld {
     pub alias: TilePropertyAliasMap,
     pub tile_definitions: TileDefinitions,
     pub meta_grid: crate::zombie::iso::iso_meta_grid::IsoMetaGrid,
+    pub scripts: crate::zombie::scripting::script_manager::ScriptManager,
     /// Problems the original would log and continue past.
     pub log: Vec<String>,
 }
@@ -942,7 +943,10 @@ impl IsoWorld {
             }
         }
         tile_definitions.set_custom_property_values()?;
-        tile_definitions.generate_tile_property_lookup_tables(&mut alias, &[]);
+        // ScriptManager.Load runs before the world loads; entity names become the values of "EntityScriptName".
+        let scripts = crate::zombie::scripting::script_manager::ScriptManager::load(root)?;
+        let entity_names: Vec<String> = scripts.entities.iter().map(|e| e.name.clone()).collect();
+        tile_definitions.generate_tile_property_lookup_tables(&mut alias, &entity_names);
         for (f, n, data) in &files {
             if let Err(e) = load_tile_definitions(&mut sprites, &alias, data, f, *n) {
                 log.push(format!("{f}: {e}"));
@@ -950,6 +954,22 @@ impl IsoWorld {
         }
         register_fake_jumbo_tree(&mut sprites, &alias, 7);
         sprites.add_sprite("media/ui/missing-tile.png");
+        // ScriptManager.PostTileDefinitions
+        let entities: Vec<(
+            String,
+            Option<crate::zombie::scripting::sprite_config::SpriteConfigScript>,
+        )> = scripts
+            .entities
+            .iter()
+            .map(|e| (e.name.clone(), e.sprite_config.clone()))
+            .collect();
+        for name in crate::zombie::scripting::sprite_config::init_scripts_post_tile_def(
+            &mut sprites,
+            &alias,
+            &entities,
+        ) {
+            log.push(format!("SpriteConfig of entity {name} not applied"));
+        }
         tile_definitions.loaded_tile_definitions(&mut sprites, &alias, has_texture)?;
 
         let mut meta_grid = IsoMetaGrid::default();
@@ -966,6 +986,7 @@ impl IsoWorld {
             alias,
             tile_definitions,
             meta_grid,
+            scripts,
             log,
         })
     }

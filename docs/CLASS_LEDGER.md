@@ -4,17 +4,17 @@ Source: decompiled `projectzomboid.jar` sha256 `e1a69eb743ede60b213a0fe7f8b83d4f
 A method counts as cited when a Rust doc comment names it. Citing is a pointer for reviewers, not proof of parity: evidence lives in docs/COMPATIBILITY.md.
 Method counts are distinct method names per top-level file (overloads and inner classes merged).
 
-**Total: 46 of 3424 classes touched, 222 of 46121 method names cited (0.5%), 962280 decompiled lines.**
+**Total: 52 of 3424 classes touched, 253 of 46121 method names cited (0.5%), 962280 decompiled lines.**
 
 | Package | Classes | Touched | Method names | Cited | Lines |
 |---|---:|---:|---:|---:|---:|
 | generation | 145 | 0 | 2113 | 0 (0.0%) | 193849 |
-| zombie.iso | 346 | 32 | 7277 | 159 (2.2%) | 144530 |
+| zombie.iso | 346 | 32 | 7277 | 173 (2.4%) | 144530 |
 | zombie.core | 450 | 10 | 5920 | 49 (0.8%) | 93574 |
 | zombie.characters | 200 | 0 | 5028 | 0 (0.0%) | 77144 |
 | zombie.network | 436 | 0 | 3229 | 0 (0.0%) | 60679 |
-| zombie.scripting | 205 | 0 | 2713 | 0 (0.0%) | 52509 |
-| zombie.entity | 156 | 0 | 2517 | 0 (0.0%) | 36294 |
+| zombie.scripting | 205 | 5 | 2713 | 15 (0.6%) | 52509 |
+| zombie.entity | 156 | 1 | 2517 | 2 (0.1%) | 36294 |
 | zombie.inventory | 40 | 0 | 2100 | 0 (0.0%) | 28391 |
 | zombie.vehicles | 42 | 0 | 1411 | 0 (0.0%) | 28275 |
 | zombie | 60 | 2 | 1192 | 10 (0.8%) | 22185 |
@@ -86,6 +86,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.core.random.RandAbstract | 1 / 2 | crates/zomboid-content/src/rng.rs, crates/zomboid-engine/src/zombie/core/random/rand_abstract.rs |
 | zombie.core.random.RandInterface | 1 / 2 | crates/zomboid-engine/src/zombie/core/random/rand_abstract.rs |
 | zombie.core.utils.BooleanGrid | 7 / 13 | crates/zomboid-engine/src/zombie/core/utils/boolean_grid.rs |
+| zombie.entity.components.spriteconfig.SpriteConfigManager | 2 / 56 | crates/zomboid-engine/src/zombie/scripting/sprite_config.rs |
 | zombie.gameStates.ChooseGameInfo | 1 / 76 | crates/zomboid-engine/src/zombie/game_states/choose_game_info.rs |
 | zombie.iso.BuildingDef | 3 / 67 | crates/zomboid-engine/src/zombie/iso/building_def.rs |
 | zombie.iso.BuildingID | 5 / 5 | crates/zomboid-engine/src/zombie/iso/building_id.rs |
@@ -94,7 +95,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.iso.IsoCell | 2 / 229 | crates/zomboid-client/src/scene.rs, crates/zomboid-engine/src/zombie/iso/iso_cell.rs |
 | zombie.iso.IsoChunk | 4 / 185 | crates/zomboid-engine/src/zombie/iso/iso_chunk.rs |
 | zombie.iso.IsoDirections | 16 / 19 | crates/zomboid-engine/src/zombie/iso/iso_directions.rs |
-| zombie.iso.IsoGridSquare | 11 / 581 | crates/zomboid-client/src/scene.rs, crates/zomboid-client/src/sim.rs, crates/zomboid-engine/src/zombie/iso/iso_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_grid_square.rs |
+| zombie.iso.IsoGridSquare | 25 / 581 | crates/zomboid-client/src/scene.rs, crates/zomboid-client/src/sim.rs, crates/zomboid-engine/src/zombie/iso/iso_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_grid_square.rs |
 | zombie.iso.IsoLot | 4 / 9 | crates/zomboid-engine/src/zombie/iso/iso_lot.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoMetaCell | 5 / 28 | crates/zomboid-engine/src/zombie/iso/iso_meta_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoMetaChunk | 7 / 27 | crates/zomboid-engine/src/zombie/iso/iso_meta_chunk.rs |
@@ -119,4 +120,9 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.iso.sprite.IsoSpriteGrid | 15 / 16 | crates/zomboid-engine/src/zombie/iso/sprite/iso_sprite_grid.rs |
 | zombie.iso.sprite.IsoSpriteManager | 2 / 6 | crates/zomboid-engine/src/zombie/iso/sprite/iso_sprite_manager.rs |
 | zombie.iso.sprite.SpriteGridParseData | 3 / 3 | crates/zomboid-engine/src/zombie/iso/sprite/sprite_grid_parse_data.rs |
+| zombie.scripting.ScriptManager | 4 / 134 | crates/zomboid-engine/src/zombie/scripting/script_manager.rs |
+| zombie.scripting.ScriptParser | 4 / 17 | crates/zomboid-engine/src/zombie/scripting/script_parser.rs |
+| zombie.scripting.entity.GameEntityScript | 2 / 26 | crates/zomboid-engine/src/zombie/scripting/script_manager.rs |
+| zombie.scripting.entity.components.spriteconfig.SpriteConfigScript | 4 / 52 | crates/zomboid-engine/src/zombie/scripting/sprite_config.rs |
+| zombie.scripting.objects.ScriptModule | 1 / 50 | crates/zomboid-engine/src/zombie/scripting/script_manager.rs |
 | zombie.util.StringUtils | 3 / 36 | crates/zomboid-engine/src/zombie/util/string_utils.rs |

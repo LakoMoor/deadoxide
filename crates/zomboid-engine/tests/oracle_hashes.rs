@@ -65,3 +65,13 @@ fn metagrid_matches_original() {
 fn chunkobjects_match_original() {
     check("chunkobjects", &["1036", "1460", "1039", "1463"]);
 }
+
+#[test]
+fn collide_matches_original() {
+    check("collide", &["1036", "1460", "1039", "1463"]);
+}
+
+#[test]
+fn entitysprites_match_original() {
+    check("entitysprites", &[]);
+}

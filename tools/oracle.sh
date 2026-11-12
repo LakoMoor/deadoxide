@@ -58,4 +58,6 @@ sel metagrid && server_case metagrid MetaGridProbe "Muldraugh, KY" 30 43 34 47
 sel chunkobjects && server_case chunkobjects ChunkObjectsProbe 1036 1460 1039 1463
 # a whole cell (1,024 chunks): sh tools/oracle.sh chunkobjects-cell
 [ "$want" = chunkobjects-cell ] && server_case chunkobjects ChunkObjectsProbe 1024 1440 1055 1471
+sel collide && server_case collide CollideProbe 1036 1460 1039 1463
+sel entitysprites && server_case entitysprites EntitySpritesProbe
 exit $fail

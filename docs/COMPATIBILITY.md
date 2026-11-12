@@ -1,3 +1,6 @@
+## Square collision matrices and entity sprite marks by direct port (2026-11-13)
+`sh tools/oracle.sh collide` → `OK   collide: 1315 lines identical`: for every square of the 16 spawn chunks the original's property set and collide/path/vision matrices equal the port's. `sh tools/oracle.sh entitysprites` → `OK   entitysprites: 879 lines identical`: entity script order and sprite marking. The client's movement still uses its older flag grid (`sim::Collision`), not these matrices.
+
 ## Chunk objects by direct port (2026-11-13)
 `ChunkObjectsProbe` runs `CellLoader.LoadCellBinaryChunk` inside the booted original with a seeded `java.util.Random` as `Rand`; `pz-dump chunkobjects` does the same through the port. `sh tools/oracle.sh chunkobjects` → `OK   chunkobjects: 1347 lines identical` (16 chunks around the Rosewood spawn house). Whole cell 32_45: 2 of 84,711 lines differ, traced with `-Doracle.trace=1` to two draws in `FluidContainerScript.getInitialAmount` in one chunk. What is and is not compared is listed under E5 in `docs/PORT.md`. The window client still builds its scene with the older `zomboid-content` readers.
 

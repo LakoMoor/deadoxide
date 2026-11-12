@@ -1,6 +1,7 @@
 //! Read-only view of an original Project Zomboid installation.
 //! No GPU, no window. The install root is never written to.
 pub mod atlas;
+pub mod fishing_zones;
 pub mod lot;
 pub mod pack;
 pub mod rng;
