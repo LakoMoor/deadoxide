@@ -13,6 +13,7 @@ use zomboid_engine::java;
 use zomboid_engine::zombie::core::random::rand_abstract::RandAbstract;
 use zomboid_engine::zombie::iso::cell_loader::{self, LoadContext};
 use zomboid_engine::zombie::iso::iso_chunk::IsoChunk;
+use zomboid_engine::zombie::iso::iso_grid_square::{GetSquare, IsoGridSquare};
 use zomboid_engine::zombie::iso::iso_meta_grid::AlarmSettings;
 use zomboid_engine::zombie::iso::iso_world::IsoWorld;
 use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::SpriteRef;
@@ -131,6 +132,13 @@ fn sprite_collision_flags(world: &IsoWorld, spr: SpriteRef) -> u16 {
     })
 }
 
+struct RegionGrid<'a>(std::collections::HashMap<(i32, i32, i32), &'a IsoGridSquare>);
+impl GetSquare for RegionGrid<'_> {
+    fn get_grid_square(&self, x: i32, y: i32, z: i32) -> Option<&IsoGridSquare> {
+        self.0.get(&(x, y, z)).copied()
+    }
+}
+
 /// Load cells `x0..=x1` x `y0..=y1` (cell coordinates) into one scene in global painter's order.
 /// Squares and objects come from the direct port (`zomboid-engine`): `CellLoader.LoadCellBinaryChunk` per chunk, so
 /// object order, overlays, open curtains, removed trees and table stacking are the original's. `Rand` is seeded with a
@@ -193,6 +201,16 @@ pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Sc
     }
     let missing = ctx.missing_tiles.len() as u64;
     drop(ctx);
+    // zombie.iso.IsoGridSquare.RecalcProperties for every square, then the collide matrices over the loaded region.
+    for ch in &mut chunks {
+        for z in ch.get_min_level()..=ch.get_max_level() {
+            for i in 0..64 {
+                if let Some(sq) = ch.get_grid_square_mut(i % 8, i / 8, z) {
+                    sq.recalc_properties(&world.sprites);
+                }
+            }
+        }
+    }
 
     let mut wanted: HashSet<String> = HashSet::new();
     for ch in &chunks {
@@ -215,6 +233,22 @@ pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Sc
     }
     let atlas = build_atlas(root, &wanted, 8192, 8192).map_err(|e| anyhow!(e))?;
     let mut collision = Collision::default();
+    {
+        let mut grid = RegionGrid(std::collections::HashMap::new());
+        for ch in &chunks {
+            for z in ch.get_min_level()..=ch.get_max_level() {
+                for i in 0..64 {
+                    if let Some(sq) = ch.get_grid_square(i % 8, i / 8, z) {
+                        grid.0.insert((sq.x, sq.y, sq.z), sq);
+                    }
+                }
+            }
+        }
+        for sq in grid.0.values() {
+            let (c, _path, _vision) = sq.calculate_matrices(&world.alias, &grid);
+            collision.set_collide_matrix(sq.x, sq.y, sq.z, c);
+        }
+    }
     let (aw, ah) = (atlas.width as f32, atlas.height as f32);
     let mut instances = Vec::new();
     let mut level_ranges = vec![];
@@ -447,6 +481,37 @@ impl Scene {
 mod collision_oracle_tests {
     use super::*;
     use zomboid_content::tiledefs::Props;
+
+    #[test]
+    #[ignore = "real-content acceptance: loads a complete cell and texture atlas"]
+    fn spawn_house_steps_follow_original_collide_matrices() -> anyhow::Result<()> {
+        // collideMatrix of four squares of the Rosewood spawn house, printed by the ORIGINAL through
+        // tests/original_probe/CollideProbe.java (2026-11-13). Bit (dx+1) + (dy+1)*3 + 9 set = step blocked.
+        let observed = [
+            ((8303, 11689), 0x7fc2fff),
+            ((8300, 11690), 0x7fe69ff),
+            ((8301, 11692), 0x7feffff),
+            ((8304, 11688), 0x7fcbfff),
+        ];
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let scene = load_region(&root, 32, 45, 32, 45)?;
+        for ((x, y), matrix) in observed {
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    if dx == 0 && dy == 0 {
+                        continue;
+                    }
+                    let blocked = (matrix >> ((dx + 1) + (dy + 1) * 3 + 9)) & 1 == 1;
+                    assert_eq!(
+                        !scene.collision.can_step((x, y), (x + dx, y + dy), 0),
+                        blocked,
+                        "from {x},{y} by {dx},{dy}"
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     #[ignore = "real-content acceptance: loads a complete cell and texture atlas"]

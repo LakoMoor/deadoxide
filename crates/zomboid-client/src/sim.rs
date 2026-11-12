@@ -22,11 +22,18 @@ pub const HOPPABLE: u16 = 512;
 #[derive(Default)]
 pub struct Collision {
     flags: HashMap<(i32, i32, i32), u16>,
+    /// zombie.iso.IsoGridSquare.collideMatrix of every loaded square, computed by the ported engine
+    /// (`IsoGridSquare::calculate_matrices`). Empty in synthetic tests, which use the flag rules below.
+    collide_matrix: HashMap<(i32, i32, i32), i32>,
 }
 
 impl Collision {
     pub fn add(&mut self, x: i32, y: i32, z: i32, f: u16) {
         *self.flags.entry((x, y, z)).or_default() |= f;
+    }
+    /// Store the original-equivalent collide matrix of a square (bit `x + y*3 + z*9`, offsets + 1, set = blocked).
+    pub fn set_collide_matrix(&mut self, x: i32, y: i32, z: i32, matrix: i32) {
+        self.collide_matrix.insert((x, y, z), matrix);
     }
     fn f(&self, x: i32, y: i32, z: i32) -> u16 {
         self.flags.get(&(x, y, z)).copied().unwrap_or(0)
@@ -90,6 +97,14 @@ impl Collision {
 
     /// zombie.iso.IsoGridSquare.CalculateCollide: partial static adjacent-square collision check.
     pub fn can_step(&self, from: (i32, i32), to: (i32, i32), z: i32) -> bool {
+        // zombie.iso.IsoGridSquare.getMatrixBit(collideMatrix, dx + 1, dy + 1, 1): the ported static collision.
+        // Doors and windows as objects (TestCollide) are not part of the matrix and not modelled yet.
+        let (mdx, mdy) = (to.0 - from.0, to.1 - from.1);
+        if mdx.abs() <= 1 && mdy.abs() <= 1 {
+            if let Some(m) = self.collide_matrix.get(&(from.0, from.1, z)) {
+                return (m >> ((mdx + 1) + (mdy + 1) * 3 + 9)) & 1 == 0;
+            }
+        }
         let from_flags = self.f(from.0, from.1, z);
         let destination = self.f(to.0, to.1, z);
         let south = self.f(to.0, to.1 + 1, z);
