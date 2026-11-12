@@ -149,3 +149,7 @@ Still missing: numeric screenshot diff, real-game Lua console log for the full c
 ### Java-guided Lua events (2026-11-12)
 
 Inspected `zombie.Lua.Event` from the pinned jar with CFR 0.152 locally, then checked callback mutation and failure cases with `LuaEventApiProbe`. Ported the measured subset into the shared Lua environment and connected World clock events to it per step. See `docs/COMPATIBILITY.md` for fixtures, the real FishingUtils.lua test with explicit doubles, and limitations. The Java output is not committed. Automatic game script loading and the Java game APIs are still missing.
+
+### Fishing trash calculation (2026-11-12)
+
+Ported the deterministic `FishSchoolManager.getTrashAbundance` path from the pinned original, checked against 75 original Java results and exposed through the client's partial Lua API with an explicitly supplied or saved trash seed. The fishing save reader and client Lua call are tested with synthetic data; the rest of fishing remains unimplemented. See `docs/COMPATIBILITY.md`.

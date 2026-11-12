@@ -43,6 +43,10 @@ impl EventRuntime {
         Ok(Self { lua, errors })
     }
 
+    pub fn install_fishing_trash(&self, trash_seed: i32) -> Result<()> {
+        crate::fishing::install(&self.lua, trash_seed)
+    }
+
     pub fn run_source(&self, source: &str, name: &str) -> Result<()> {
         self.lua.load(source).set_name(name).exec()
     }

@@ -731,6 +731,30 @@ fn main() -> anyhow::Result<()> {
     }
     let lua = zomboid_lua::events::EventRuntime::new()
         .map_err(|e| anyhow::anyhow!("Lua initialization: {e}"))?;
+    // An existing save can provide the original persistent fishing trash seed.
+    // No fish-school generation or seed updates are implied by this limited API.
+    let fishing_path = if let Some(i) = a.iter().position(|s| s == "--fishing-data") {
+        Some(std::path::PathBuf::from(a.get(i + 1).ok_or_else(|| {
+            anyhow::anyhow!("--fishing-data requires a path")
+        })?))
+    } else if let Some(i) = a.iter().position(|s| s == "--save") {
+        let path = std::path::Path::new(&a[i + 1]);
+        let directory = if path.is_dir() {
+            path
+        } else {
+            path.parent().unwrap_or(path)
+        };
+        let candidate = directory.join("fishingData.bin");
+        candidate.is_file().then_some(candidate)
+    } else {
+        None
+    };
+    if let Some(path) = fishing_path {
+        let seed = zomboid_lua::fishing::saved_trash_seed(&path)?;
+        lua.install_fishing_trash(seed)
+            .map_err(|e| anyhow::anyhow!("fishing Lua API: {e}"))?;
+        println!("fishing: loaded saved trash seed; other fishing APIs incomplete");
+    }
     if let Some(i) = a.iter().position(|s| s == "--lua-script") {
         let path = a
             .get(i + 1)
