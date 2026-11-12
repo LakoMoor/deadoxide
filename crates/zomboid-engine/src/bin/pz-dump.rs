@@ -1,20 +1,28 @@
 //! Dumps engine state in the exact text format of the Java probes in `tests/original_probe`, for byte-for-byte diffs.
-//!   pz-dump tiledefs <game root>      (pairs with TileDefsProbe.java)
+//!   pz-dump tiledefs <game root>                  (pairs with TileDefsProbe.java)
+//!   pz-dump lotheaders <game root> <map folder>   (pairs with LotHeadersProbe.java)
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::Path;
 
 use zomboid_engine::zombie::core::tile_property_alias_map::TilePropertyAliasMap;
+use zomboid_engine::zombie::game_states::choose_game_info;
+use zomboid_engine::zombie::iso::iso_meta_cell::IsoMetaCell;
+use zomboid_engine::zombie::iso::iso_meta_grid;
 use zomboid_engine::zombie::iso::iso_world::{
     self, TileDefinitions, VANILLA_TILE_DEFINITION_FILES,
 };
+use zomboid_engine::zombie::iso::map_files::MapFiles;
 use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::IsoSpriteManager;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let r = match a.get(1).map(String::as_str) {
         Some("tiledefs") if a.len() == 3 => tiledefs(Path::new(&a[2])),
-        _ => Err("usage: pz-dump tiledefs <game root>".into()),
+        Some("lotheaders") if a.len() == 4 => lotheaders(Path::new(&a[2]), &a[3]),
+        _ => {
+            Err("usage: pz-dump tiledefs <game root> | lotheaders <game root> <map folder>".into())
+        }
     };
     match r {
         Ok(text) => {
@@ -144,5 +152,125 @@ pub fn tiledefs(root: &Path) -> Result<String, String> {
         );
     }
     eprintln!("PROBE sprites={} intMap={}", names.len(), sm.int_map.len());
+    Ok(sb)
+}
+
+/// Every lotheader of one map folder through the port of MetaGridLoaderThread.loadCell, cells in x-then-y order.
+/// `lightsActive` is random in the original and not printed.
+pub fn lotheaders(root: &Path, dir: &str) -> Result<String, String> {
+    let media = root.join("media");
+    let details = choose_game_info::get_map_details(&media, dir).ok_or("no map.info")?;
+    let mut mf = MapFiles::new(dir, &media.join("maps").join(dir), 0);
+    if !mf.load(details.fixed2x)? {
+        return Err("MapFiles.load false".into());
+    }
+    mf.post_load();
+    let mut sb = String::new();
+    let _ = writeln!(
+        sb,
+        "M {} {} {} {} {} {} {} {}",
+        mf.min_x,
+        mf.min_y,
+        mf.max_x,
+        mf.max_y,
+        mf.min_cell300_x,
+        mf.min_cell300_y,
+        mf.max_cell300_x,
+        mf.max_cell300_y
+    );
+    for y in mf.min_y..=mf.max_y {
+        for x in mf.min_x..=mf.max_x {
+            sb.push(if mf.has_cell(x, y) { '1' } else { '0' });
+        }
+        sb.push('\n');
+    }
+    for y in mf.min_cell300_y..=mf.max_cell300_y {
+        for x in mf.min_cell300_x..=mf.max_cell300_x {
+            sb.push(if mf.has_cell300(x, y) { '1' } else { '0' });
+        }
+        sb.push('\n');
+    }
+    let mut all = vec![mf];
+    for x in all[0].min_x..=all[0].max_x {
+        for y in all[0].min_y..=all[0].max_y {
+            if !all[0].has_cell(x, y) {
+                continue;
+            }
+            let name = format!("{x}_{y}.lotheader");
+            let mut h = all[0].info_headers.remove(&name).ok_or("header missing")?;
+            let data = std::fs::read(&h.absolute_file_path).map_err(|e| e.to_string())?;
+            let mut c = IsoMetaCell::new(x, y);
+            if let Err(e) =
+                iso_meta_grid::load_cell(&all, 0, &mut h, &mut c, &data, x, y, &mut |_| 1, &[])
+            {
+                eprintln!("ERROR loading {name}: {e}");
+            }
+            let _ = writeln!(
+                sb,
+                "C {x} {y} {} {} {} {} {} {} {} {} {}",
+                h.version,
+                h.width,
+                h.height,
+                h.min_level,
+                h.max_level,
+                h.fixed2x,
+                h.tiles_used.len(),
+                c.room_list.len(),
+                c.buildings.len()
+            );
+            for t in &h.tiles_used {
+                let _ = writeln!(sb, "T {t}");
+            }
+            for r in &c.room_list {
+                let _ = write!(
+                    sb,
+                    "R {} {} {} {} {} {} {} {} {} [{}]",
+                    r.id,
+                    r.meta_id,
+                    r.level,
+                    r.x,
+                    r.y,
+                    r.x2,
+                    r.y2,
+                    r.area,
+                    r.building.unwrap_or(-1),
+                    r.name
+                );
+                for q in &r.rects {
+                    let _ = write!(sb, " {},{},{},{}", q.x, q.y, q.w, q.h);
+                }
+                sb.push_str(" |");
+                for o in &r.objects {
+                    let _ = write!(sb, " {},{},{}", o.r#type, o.x, o.y);
+                }
+                sb.push('\n');
+            }
+            for b in &c.buildings {
+                let _ = write!(
+                    sb,
+                    "B {} {} {} {} {} {} r",
+                    b.id, b.meta_id, b.x, b.y, b.x2, b.y2
+                );
+                for r in &b.rooms {
+                    let _ = write!(sb, " {}", c.room_list[*r].id);
+                }
+                sb.push_str(" e");
+                for r in &b.emptyoutside {
+                    let _ = write!(sb, " {}", c.room_list[*r].id);
+                }
+                sb.push_str(" c");
+                for v in &b.overlapped_chunks {
+                    let _ = write!(sb, " {v}");
+                }
+                sb.push('\n');
+            }
+            sb.push_str("Z ");
+            for i in 0..1024 {
+                let _ = write!(sb, "{:02x}", h.get_zombie_intensity(i));
+            }
+            sb.push('\n');
+            all[0].info_headers.insert(name, h);
+        }
+    }
     Ok(sb)
 }

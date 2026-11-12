@@ -1,4 +1,14 @@
+pub mod building_def;
+pub mod building_id;
 pub mod iso_directions;
+pub mod iso_lot;
+pub mod iso_meta_cell;
+pub mod iso_meta_grid;
 pub mod iso_world;
+pub mod lot_header;
+pub mod map_files;
+pub mod meta_object;
+pub mod room_def;
+pub mod room_id;
 pub mod sprite;
 pub mod sprite_details;

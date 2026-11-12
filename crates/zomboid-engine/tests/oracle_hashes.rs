@@ -13,7 +13,7 @@ fn game_root() -> Option<PathBuf> {
         .then_some(root)
 }
 
-fn check(case: &str) {
+fn check(case: &str, args: &[&str]) {
     let Some(root) = game_root() else {
         eprintln!("SKIPPED {case}: no game install next to the workspace");
         return;
@@ -42,5 +42,10 @@ fn check(case: &str) {
 
 #[test]
 fn tiledefs_match_original() {
-    check("tiledefs");
+    check("tiledefs", &[]);
+}
+
+#[test]
+fn lotheaders_match_original() {
+    check("lotheaders", &["Muldraugh, KY"]);
 }

@@ -30,4 +30,5 @@ run_case() {
 want=${1:-all}
 sel() { [ "$want" = all ] || [ "$want" = "$1" ]; }
 sel tiledefs && run_case tiledefs TileDefsProbe
+sel lotheaders && run_case lotheaders LotHeadersProbe "Muldraugh, KY"
 exit $fail

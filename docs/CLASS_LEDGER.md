@@ -4,13 +4,13 @@ Source: decompiled `projectzomboid.jar` sha256 `e1a69eb743ede60b213a0fe7f8b83d4f
 A method counts as cited when a Rust doc comment names it. Citing is a pointer for reviewers, not proof of parity: evidence lives in docs/COMPATIBILITY.md.
 Method counts are distinct method names per top-level file (overloads and inner classes merged).
 
-**Total: 25 of 3424 classes touched, 123 of 46121 method names cited (0.3%), 962280 decompiled lines.**
+**Total: 36 of 3424 classes touched, 167 of 46121 method names cited (0.4%), 962280 decompiled lines.**
 
 | Package | Classes | Touched | Method names | Cited | Lines |
 |---|---:|---:|---:|---:|---:|
 | generation | 145 | 0 | 2113 | 0 (0.0%) | 193849 |
-| zombie.iso | 346 | 13 | 7277 | 69 (0.9%) | 144530 |
-| zombie.core | 450 | 9 | 5920 | 42 (0.7%) | 93574 |
+| zombie.iso | 346 | 22 | 7277 | 105 (1.4%) | 144530 |
+| zombie.core | 450 | 10 | 5920 | 49 (0.8%) | 93574 |
 | zombie.characters | 200 | 0 | 5028 | 0 (0.0%) | 77144 |
 | zombie.network | 436 | 0 | 3229 | 0 (0.0%) | 60679 |
 | zombie.scripting | 205 | 0 | 2713 | 0 (0.0%) | 52509 |
@@ -26,7 +26,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.ai | 99 | 0 | 875 | 0 (0.0%) | 14312 |
 | zombie.erosion | 23 | 0 | 216 | 0 (0.0%) | 13296 |
 | se | 70 | 0 | 692 | 0 (0.0%) | 11221 |
-| zombie.gameStates | 19 | 0 | 429 | 0 (0.0%) | 9502 |
+| zombie.gameStates | 19 | 1 | 429 | 1 (0.2%) | 9502 |
 | zombie.debug | 67 | 0 | 473 | 0 (0.0%) | 9106 |
 | zombie.util | 70 | 1 | 520 | 3 (0.6%) | 8496 |
 | fmod | 102 | 0 | 652 | 0 (0.0%) | 7709 |
@@ -85,13 +85,24 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.core.random.Rand | 1 / 5 | crates/zomboid-engine/src/zombie/core/random/rand_abstract.rs |
 | zombie.core.random.RandAbstract | 1 / 2 | crates/zomboid-content/src/rng.rs, crates/zomboid-engine/src/zombie/core/random/rand_abstract.rs |
 | zombie.core.random.RandInterface | 1 / 2 | crates/zomboid-engine/src/zombie/core/random/rand_abstract.rs |
+| zombie.core.utils.BooleanGrid | 7 / 13 | crates/zomboid-engine/src/zombie/core/utils/boolean_grid.rs |
+| zombie.gameStates.ChooseGameInfo | 1 / 76 | crates/zomboid-engine/src/zombie/game_states/choose_game_info.rs |
+| zombie.iso.BuildingDef | 3 / 67 | crates/zomboid-engine/src/zombie/iso/building_def.rs |
+| zombie.iso.BuildingID | 5 / 5 | crates/zomboid-engine/src/zombie/iso/building_id.rs |
 | zombie.iso.CellLoader | 0 / 7 | crates/zomboid-engine/src/zombie/iso/iso_world.rs |
 | zombie.iso.FishSchoolManager | 8 / 33 | crates/zomboid-lua/src/fishing.rs |
 | zombie.iso.IsoCell | 1 / 229 | crates/zomboid-client/src/scene.rs |
 | zombie.iso.IsoDirections | 16 / 19 | crates/zomboid-engine/src/zombie/iso/iso_directions.rs |
 | zombie.iso.IsoGridSquare | 1 / 581 | crates/zomboid-client/src/scene.rs, crates/zomboid-client/src/sim.rs |
-| zombie.iso.IsoMetaGrid | 1 / 98 | crates/zomboid-content/src/fishing_zones.rs |
+| zombie.iso.IsoLot | 2 / 9 | crates/zomboid-engine/src/zombie/iso/iso_lot.rs |
+| zombie.iso.IsoMetaCell | 2 / 28 | crates/zomboid-engine/src/zombie/iso/iso_meta_cell.rs |
+| zombie.iso.IsoMetaGrid | 2 / 98 | crates/zomboid-content/src/fishing_zones.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoWorld | 10 / 131 | crates/zomboid-engine/src/zombie/iso/iso_world.rs |
+| zombie.iso.LotHeader | 3 / 10 | crates/zomboid-engine/src/zombie/iso/lot_header.rs |
+| zombie.iso.MapFiles | 9 / 14 | crates/zomboid-engine/src/zombie/iso/map_files.rs |
+| zombie.iso.MetaObject | 0 / 7 | crates/zomboid-engine/src/zombie/iso/meta_object.rs |
+| zombie.iso.RoomDef | 6 / 51 | crates/zomboid-engine/src/zombie/iso/room_def.rs |
+| zombie.iso.RoomID | 5 / 5 | crates/zomboid-engine/src/zombie/iso/room_id.rs |
 | zombie.iso.SpriteDetails.IsoFlagType | 3 / 4 | crates/zomboid-engine/src/zombie/iso/sprite_details/iso_flag_type.rs |
 | zombie.iso.SpriteDetails.IsoObjectType | 3 / 4 | crates/zomboid-engine/src/zombie/iso/sprite_details/iso_object_type.rs |
 | zombie.iso.sprite.IsoSprite | 6 / 100 | crates/zomboid-engine/src/zombie/iso/sprite/iso_sprite.rs |
