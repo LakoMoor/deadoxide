@@ -165,3 +165,7 @@ Ported the state, coordinate hashing, additive chum contribution and explicit ex
 ### Chum action integration (2026-11-12)
 
 The saved fishing state now reaches the client Lua manager; `addChum` uses a game-calendar minute and the client advances/expunges the partial state each World step. Original UTC calendar fixtures and an actual original Lua action with explicitly stubbed inventory/network are compared in tests. Host-local DST and full original update order remain unverified; fish abundance and actual inventory/network mechanics are absent.
+
+### Original cellular random stream (2026-11-12)
+
+Added the original seeded cellular generator and bounded integer operation, validated against 70 Java outputs; its rule is read from the installed JAR, not stored in this repository. The original FishingUtils daily callback also matches four controlled seed updates. An explicit client seed enables this experimental path, but the game's global consumer order and other RNG functions are not integrated. See the compatibility ledger.

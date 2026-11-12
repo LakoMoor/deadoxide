@@ -234,6 +234,8 @@ pub fn saved_trash_seed(path: &Path) -> std::io::Result<i32> {
 
 /// Runtime portion of FishSchoolManager supported by this port.
 pub struct FishingRuntime {
+    pub fish_seed: i32,
+    pub random: Option<zomboid_content::rng::CellularRng>,
     pub chum: ChumState,
     pub calendar_minutes: Option<i32>,
 }
@@ -243,6 +245,8 @@ pub type SharedFishingRuntime = Rc<RefCell<FishingRuntime>>;
 /// Install the supported FishSchoolManager methods with restored chum state.
 pub fn install_saved(lua: &Lua, save: &FishingSave) -> Result<SharedFishingRuntime> {
     let state = Rc::new(RefCell::new(FishingRuntime {
+        fish_seed: save.seed,
+        random: None,
         chum: ChumState::from_save(save),
         calendar_minutes: None,
     }));
@@ -263,6 +267,20 @@ pub fn install_saved(lua: &Lua, save: &FishingSave) -> Result<SharedFishingRunti
                 .calendar_minutes
                 .ok_or_else(|| mlua::Error::runtime("game calendar unavailable for addChum"))?;
             fishing.chum.add(x, y, force as i32, now);
+            Ok(())
+        })?,
+    )?;
+    let shared = state.clone();
+    manager.set(
+        "updateSeed",
+        lua.create_function(move |_, _self: Value| {
+            let mut fishing = shared.borrow_mut();
+            let rng = fishing.random.as_mut().ok_or_else(|| {
+                mlua::Error::runtime(
+                    "original shared RNG is unavailable; daily fishing seed was not updated",
+                )
+            })?;
+            fishing.fish_seed = rng.next_int(100000);
             Ok(())
         })?,
     )?;

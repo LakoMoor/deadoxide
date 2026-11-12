@@ -3,6 +3,7 @@
 pub mod atlas;
 pub mod lot;
 pub mod pack;
+pub mod rng;
 pub mod sandbox;
 pub mod save;
 pub mod script;

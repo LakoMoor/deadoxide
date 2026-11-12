@@ -755,6 +755,24 @@ fn main() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("fishing Lua API: {e}"))?;
         println!("fishing: loaded saved seeds and chum; fish abundance and other fishing APIs incomplete");
     }
+    if let Some(i) = a.iter().position(|s| s == "--rng-seed") {
+        let value = a
+            .get(i + 1)
+            .ok_or_else(|| anyhow::anyhow!("--rng-seed requires eight hexadecimal digits"))?;
+        if value.len() != 8 {
+            anyhow::bail!("--rng-seed requires eight hexadecimal digits");
+        }
+        let seed = u32::from_str_radix(value, 16)?;
+        let rule = zomboid_content::rng::load_rule(&root)?;
+        lua.set_fishing_rng(zomboid_content::rng::CellularRng::new(
+            seed.to_be_bytes(),
+            rule,
+        ))
+        .map_err(|e| anyhow::anyhow!("fishing RNG: {e}"))?;
+        println!(
+            "fishing: controlled RNG seed installed; global game RNG integration is incomplete"
+        );
+    }
     lua.update_fishing_time(
         world
             .clock

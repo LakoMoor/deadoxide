@@ -57,6 +57,22 @@ impl EventRuntime {
         Ok(())
     }
 
+    /// Attach a caller-supplied original RNG. All consumers must share its stream.
+    pub fn set_fishing_rng(&self, rng: zomboid_content::rng::CellularRng) -> Result<()> {
+        let fishing = self.fishing.borrow();
+        let state = fishing
+            .as_ref()
+            .ok_or_else(|| mlua::Error::runtime("fishing save not loaded"))?;
+        state.borrow_mut().random = Some(rng);
+        Ok(())
+    }
+
+    pub fn fishing_seed(&self) -> Option<i32> {
+        let fishing = self.fishing.borrow();
+        let seed = fishing.as_ref()?.borrow().fish_seed;
+        Some(seed)
+    }
+
     /// Update the game-calendar minute and expire chum before dispatching the next events.
     pub fn update_fishing_time(&self, minute: Option<i32>) {
         if let Some(state) = self.fishing.borrow().as_ref() {
@@ -104,6 +120,58 @@ impl EventRuntime {
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    #[test]
+    #[ignore = "requires installed original game JAR and Lua"]
+    fn real_fishing_daily_seed_matches_original() -> Result<()> {
+        let runtime = EventRuntime::new()?;
+        runtime.install_fishing_save(&crate::fishing::FishingSave {
+            seed: 12345,
+            trash_seed: 54321,
+            chum: vec![],
+        })?;
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let rule = zomboid_content::rng::load_rule(&root).map_err(mlua::Error::external)?;
+        runtime.set_fishing_rng(zomboid_content::rng::CellularRng::new(
+            [0x12, 0x34, 0x56, 0x78],
+            rule,
+        ))?;
+        runtime.run_source("Vector2={new=function() return {} end}", "test-double")?;
+        runtime.load_file(&root.join("media/lua/shared/Fishing/FishingUtils.lua"))?;
+        for line in include_str!("../../../tests/golden/fishing_daily_seed.txt").lines() {
+            assert!(runtime.dispatch("EveryDays")?.is_empty());
+            let expected = line
+                .split_once('=')
+                .unwrap()
+                .1
+                .split_once(',')
+                .unwrap()
+                .0
+                .parse::<i32>()
+                .unwrap();
+            assert_eq!(runtime.fishing_seed(), Some(expected), "{line}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn daily_fishing_without_rng_reports_error_and_preserves_seed() -> Result<()> {
+        let runtime = EventRuntime::new()?;
+        runtime.install_fishing_save(&crate::fishing::FishingSave {
+            seed: 12345,
+            trash_seed: 54321,
+            chum: vec![],
+        })?;
+        runtime.run_source(
+            "Events.EveryDays.Add(function() FishSchoolManager.getInstance():updateSeed() end)",
+            "test",
+        )?;
+        let errors = runtime.dispatch("EveryDays")?;
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].message.contains("shared RNG is unavailable"));
+        assert_eq!(runtime.fishing_seed(), Some(12345));
+        Ok(())
+    }
 
     #[test]
     fn event_mutations_and_errors_match_original() -> Result<()> {

@@ -6,3 +6,4 @@ edition = "2021"
 sha2 = "0.10"
 png = "0.17"
 rusqlite = { version = "0.32", features = ["bundled"] }
+zip = { version = "2.6.1", default-features = false, features = ["deflate"] }

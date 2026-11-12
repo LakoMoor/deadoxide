@@ -7462,6 +7462,7 @@ dependencies = [
  "png 0.17.16",
  "rusqlite",
  "sha2",
+ "zip",
 ]
 
 [[package]]
