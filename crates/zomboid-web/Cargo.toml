@@ -1,0 +1,12 @@
+[package]
+name = "zomboid-web"
+version = "0.1.0"
+edition = "2021"
+description = "Browser build: the same engine and scene code over files the player picks from their own install."
+[lib]
+crate-type = ["cdylib", "rlib"]
+[dependencies]
+wasm-bindgen = "0.2"
+bytemuck = "1"
+zomboid-scene = { path = "../zomboid-scene" }
+zomboid-engine = { path = "../zomboid-engine" }

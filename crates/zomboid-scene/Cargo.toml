@@ -1,0 +1,12 @@
+[package]
+name = "zomboid-scene"
+version = "0.1.0"
+edition = "2021"
+description = "Window-free scene and simulation shared by the desktop client and the browser build."
+[dependencies]
+anyhow = "1"
+bytemuck = { version = "1", features = ["derive"] }
+log = "0.4"
+chrono = "0.4.45"
+zomboid-content = { path = "../zomboid-content", default-features = false }
+zomboid-engine = { path = "../zomboid-engine" }

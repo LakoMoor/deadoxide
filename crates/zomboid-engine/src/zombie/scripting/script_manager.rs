@@ -40,15 +40,15 @@ pub struct ScriptManager {
 /// zombie.scripting.ScriptManager.searchFolders: every `.txt` below `fo`, as lower-case paths relative to the game
 /// root, skipping folders whose path contains "tempNotWorking".
 fn search_folders(root: &Path, fo: &Path, load_list: &mut Vec<(String, std::path::PathBuf)>) {
-    if fo.is_dir() {
+    if crate::vfs::is_dir(fo) {
         if fo.to_string_lossy().contains("tempNotWorking") {
             return;
         }
-        let Ok(rd) = std::fs::read_dir(fo) else {
+        let Ok(names) = crate::vfs::read_dir(fo) else {
             return;
         };
-        for e in rd.flatten() {
-            search_folders(root, &e.path(), load_list);
+        for name in names {
+            search_folders(root, &fo.join(name), load_list);
         }
     } else if fo.to_string_lossy().to_lowercase().ends_with(".txt") {
         if let Ok(rel) = fo.strip_prefix(root) {
@@ -94,7 +94,7 @@ impl ScriptManager {
         let mut m = ScriptManager::default();
         for (rel, path) in game_files {
             // LoadFile: lines joined with '\n' (BufferedReader.readLine drops line terminators).
-            let Ok(bytes) = std::fs::read(&path) else {
+            let Ok(bytes) = crate::vfs::read(&path) else {
                 continue;
             };
             let text = String::from_utf8_lossy(&bytes);

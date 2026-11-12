@@ -1,6 +1,7 @@
 //! Saved game: the local player row of `players.db` (SQLite) in a save folder (build 42.21.0, table `localPlayers`).
 //! Reads use a read-only SQLite connection, which includes committed WAL data. SQLite may use
 //! or create transient WAL shared-memory sidecars; this does not restore other saved world state.
+#[cfg(feature = "native")]
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
 
@@ -16,6 +17,7 @@ pub struct SavedPlayer {
 }
 
 /// Reads the first local player. `Ok(None)` if the table has no rows.
+#[cfg(feature = "native")]
 pub fn load_player(db: &Path) -> Result<Option<SavedPlayer>, String> {
     let c = Connection::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|e| e.to_string())?;

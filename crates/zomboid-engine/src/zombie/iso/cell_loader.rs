@@ -662,7 +662,7 @@ pub fn load_cell_binary_chunk<R: JavaRandom>(
             continue;
         };
         if ctx.lotpack_cache.as_ref().is_none_or(|c| c.0 != path) {
-            ctx.lotpack_cache = std::fs::read(&path).ok().map(|d| (path.clone(), d));
+            ctx.lotpack_cache = crate::vfs::read(&path).ok().map(|d| (path.clone(), d));
         }
         let cached = ctx.lotpack_cache.take();
         if let Some((_, pack)) = &cached {

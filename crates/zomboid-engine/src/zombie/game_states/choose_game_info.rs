@@ -13,7 +13,7 @@ pub struct Map {
 /// zombie.gameStates.ChooseGameInfo.getMapDetails: `None` when the folder has no map.info. Vanilla lookup only
 /// (the original resolves the path through the mod-aware file system and caches the result).
 pub fn get_map_details(media: &Path, dir: &str) -> Option<Map> {
-    let text = std::fs::read(media.join("maps").join(dir).join("map.info")).ok()?;
+    let text = crate::vfs::read(&media.join("maps").join(dir).join("map.info")).ok()?;
     let text = String::from_utf8_lossy(&text);
     let mut map = Map {
         title: dir.to_string(),

@@ -177,7 +177,9 @@ impl BasementsPerMap {
             ..Default::default()
         };
         let dir = media.join("maps").join(map_id);
-        if let Ok(text) = std::fs::read_to_string(dir.join("basements.lua")) {
+        if let Ok(text) = crate::vfs::read(&dir.join("basements.lua"))
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+        {
             let mut section = "";
             for line in text.lines() {
                 let l = line.trim();
@@ -222,7 +224,9 @@ impl BasementsPerMap {
                 }
             }
         }
-        if let Ok(text) = std::fs::read_to_string(dir.join("objects.lua")) {
+        if let Ok(text) = crate::vfs::read(&dir.join("objects.lua"))
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+        {
             // Entries start with "{ name" at two spaces of indentation and may continue on following lines.
             let mut entries: Vec<String> = Vec::new();
             for line in text.lines() {
@@ -301,7 +305,7 @@ impl Basements {
             // loadBasementDefinitionHeaders: a layout must hold exactly one building; its size replaces the Lua numbers.
             for def in &mut m.basement_definitions {
                 if let Some(h) =
-                    std::fs::read(media.join("binmap").join(format!("{}.pzby", def.name)))
+                    crate::vfs::read(&media.join("binmap").join(format!("{}.pzby", def.name)))
                         .ok()
                         .and_then(|d| load_header(&d).ok())
                         .filter(|h| h.building_def_list.len() == 1)
@@ -312,8 +316,8 @@ impl Basements {
                 }
             }
             for def in &mut m.basement_access_definitions {
-                def.header = std::fs::read(
-                    media
+                def.header = crate::vfs::read(
+                    &media
                         .join("basement_access")
                         .join(format!("{}.pzby", def.name)),
                 )

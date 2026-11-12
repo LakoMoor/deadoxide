@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeadOxide in the browser</title>
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<style>
+  #view { width: 100%; height: 70vh; display: block; background: #141814; border-radius: 12px; outline: none; }
+  .bar { display: flex; gap: 16px; justify-content: space-between; align-items: baseline; margin: 10px 0; font-size: 14px; opacity: .85; }
+  #pick { margin: 26px 0; padding: 22px; border: 1px dashed #777; border-radius: 12px; }
+  ul.plain { margin: 10px 0 0 18px; }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap"><a class="brand" href="../"><img src="../assets/icon-256.png" alt="">DeadOxide</a><nav class="links"><a href="../#progress">Progress</a><a href="../#download">Download</a></nav></div></header>
+<main class="wrap">
+  <h1>DeadOxide in the browser <span class="pill">preview</span></h1>
+  <p class="lead">The same Rust engine as the desktop client, compiled to WebAssembly. It needs your own copy of Project Zomboid 42.21.0: nothing from the game is hosted here, and the files you pick stay on your computer (they are read in this tab and never uploaded).</p>
+  <div id="pick">
+    <label class="btn primary" for="folder">Choose your Project Zomboid folder</label>
+    <input id="folder" type="file" webkitdirectory hidden>
+    <ul class="plain">
+      <li>Pick the folder that contains <code>media</code> (Steam: right-click the game, Manage, Browse local files; on macOS pick <code>Project Zomboid.app/Contents/Java</code>).</li>
+      <li>The browser will list the whole folder; only about 420 MB of it is read (tile packs, tile definitions, scripts, cell headers, one map cell). Needs a desktop browser with WebGL2 and about 2 GB of free memory.</li>
+      <li>What you get: the Rosewood start house and its 256x256 cell, walking with the ported collision (walls, closed doors, windows). No zombies, items, lighting, sound or interface yet.</li>
+    </ul>
+  </div>
+  <div class="bar"><span id="status">Waiting for a game folder.</span><span id="pos"></span></div>
+  <canvas id="view" tabindex="0" hidden></canvas>
+</main>
+<script type="module" src="play.js"></script>
+</body>
+</html>

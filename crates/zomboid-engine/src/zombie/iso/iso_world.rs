@@ -933,7 +933,7 @@ impl IsoWorld {
             files.push((
                 f,
                 n,
-                std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?,
+                crate::vfs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?,
             ));
         }
         let mut tile_definitions = TileDefinitions::default();

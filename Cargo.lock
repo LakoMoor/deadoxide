@@ -7454,6 +7454,7 @@ dependencies = [
  "zomboid-content",
  "zomboid-engine",
  "zomboid-lua",
+ "zomboid-scene",
 ]
 
 [[package]]
@@ -7490,6 +7491,28 @@ dependencies = [
  "mlua",
  "serde_json",
  "zomboid-content",
+]
+
+[[package]]
+name = "zomboid-scene"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "chrono",
+ "log",
+ "zomboid-content",
+ "zomboid-engine",
+]
+
+[[package]]
+name = "zomboid-web"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "wasm-bindgen",
+ "zomboid-engine",
+ "zomboid-scene",
 ]
 
 [[package]]

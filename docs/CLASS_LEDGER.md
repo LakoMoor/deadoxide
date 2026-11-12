@@ -74,7 +74,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 
 | Class | Cited / method names | Rust |
 |---|---:|---|
-| zombie.GameTime | 7 / 136 | crates/zomboid-client/src/sim.rs, crates/zomboid-content/src/save.rs |
+| zombie.GameTime | 7 / 136 | crates/zomboid-content/src/save.rs, crates/zomboid-scene/src/sim.rs |
 | zombie.SandboxOptions | 3 / 101 | crates/zomboid-content/src/sandbox.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.basements.BasementDefinition | 0 / 0 | crates/zomboid-engine/src/zombie/basements/mod.rs |
 | zombie.basements.BasementPlacement | 0 / 0 | crates/zomboid-engine/src/zombie/basements/mod.rs |
@@ -98,10 +98,10 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.iso.BuildingID | 5 / 5 | crates/zomboid-engine/src/zombie/iso/building_id.rs |
 | zombie.iso.CellLoader | 4 / 7 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_world.rs |
 | zombie.iso.FishSchoolManager | 8 / 33 | crates/zomboid-lua/src/fishing.rs |
-| zombie.iso.IsoCell | 2 / 229 | crates/zomboid-client/src/scene.rs, crates/zomboid-engine/src/zombie/iso/iso_cell.rs |
+| zombie.iso.IsoCell | 2 / 229 | crates/zomboid-engine/src/zombie/iso/iso_cell.rs, crates/zomboid-scene/src/scene.rs |
 | zombie.iso.IsoChunk | 4 / 185 | crates/zomboid-engine/src/zombie/iso/iso_chunk.rs |
 | zombie.iso.IsoDirections | 16 / 19 | crates/zomboid-engine/src/zombie/iso/iso_directions.rs |
-| zombie.iso.IsoGridSquare | 31 / 581 | crates/zomboid-client/src/scene.rs, crates/zomboid-client/src/sim.rs, crates/zomboid-engine/src/zombie/iso/iso_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_grid_square.rs |
+| zombie.iso.IsoGridSquare | 31 / 581 | crates/zomboid-engine/src/zombie/iso/iso_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_grid_square.rs, crates/zomboid-scene/src/scene.rs, crates/zomboid-scene/src/sim.rs |
 | zombie.iso.IsoLot | 4 / 9 | crates/zomboid-engine/src/zombie/iso/iso_lot.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoMetaCell | 5 / 28 | crates/zomboid-engine/src/zombie/iso/iso_meta_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoMetaChunk | 7 / 27 | crates/zomboid-engine/src/zombie/iso/iso_meta_chunk.rs |

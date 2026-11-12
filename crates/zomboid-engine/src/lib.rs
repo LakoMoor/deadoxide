@@ -4,4 +4,5 @@
 //! Singletons of the original (`IsoSpriteManager.instance`, `TilePropertyAliasMap.instance`) are explicit values here.
 #![forbid(unsafe_code)]
 pub mod java;
+pub mod vfs;
 pub mod zombie;

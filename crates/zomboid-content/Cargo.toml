@@ -5,5 +5,10 @@ edition = "2021"
 [dependencies]
 sha2 = "0.10"
 png = "0.17"
-rusqlite = { version = "0.32", features = ["bundled"] }
-zip = { version = "2.6.1", default-features = false, features = ["deflate"] }
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+zip = { version = "2.6.1", default-features = false, features = ["deflate"], optional = true }
+
+[features]
+# Readers that need C libraries or zip (saves, the jar); left out of the browser build.
+default = ["native"]
+native = ["dep:rusqlite", "dep:zip"]

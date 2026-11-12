@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["launcher", "crates/zomboid-lua", "crates/zomboid-client", "crates/zomboid-content", "crates/zomboid-ctl", "crates/zomboid-engine"]
+members = ["launcher", "crates/zomboid-lua", "crates/zomboid-client", "crates/zomboid-content", "crates/zomboid-ctl", "crates/zomboid-engine", "crates/zomboid-scene", "crates/zomboid-web"]
 
 [profile.dev]
 opt-level = 1

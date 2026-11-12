@@ -1,7 +1,5 @@
 //! Zomboid-rs client. `zomboid-client <root> [cell] [--shot out.png [cx cy zoom w h]]`
 mod light;
-mod scene;
-mod sim;
 use scene::*;
 use sim::{Player, World, TICK_HZ};
 use std::sync::Arc;
@@ -13,6 +11,7 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
+use zomboid_scene::{scene, sim};
 
 /// Measured against the real game (tests/golden/spawn_rosewood): camera centre sits 56 px above the player feet at zoom 1. One sample only.
 const CAM_OVER_FEET: f32 = 56.0;

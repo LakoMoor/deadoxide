@@ -16,6 +16,7 @@ chrono = "0.4.45"
 
 zomboid-content = { path = "../zomboid-content" }
 zomboid-engine = { path = "../zomboid-engine" }
+zomboid-scene = { path = "../zomboid-scene" }
 zomboid-lua = { path = "../zomboid-lua" }
 
 [dev-dependencies]

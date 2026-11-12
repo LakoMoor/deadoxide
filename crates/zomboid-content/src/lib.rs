@@ -4,6 +4,7 @@ pub mod atlas;
 pub mod fishing_zones;
 pub mod lot;
 pub mod pack;
+#[cfg(feature = "native")]
 pub mod rng;
 pub mod sandbox;
 pub mod save;

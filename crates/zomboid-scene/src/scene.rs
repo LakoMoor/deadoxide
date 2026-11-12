@@ -6,10 +6,11 @@ use crate::sim::{
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
 use std::path::Path;
-use zomboid_content::atlas::{build_atlas, Atlas};
+use zomboid_content::atlas::{build_atlas_from, pack_order, Atlas};
 #[cfg(test)]
 use zomboid_content::tiledefs::TileDefs;
 use zomboid_engine::java;
+use zomboid_engine::vfs;
 use zomboid_engine::zombie::core::random::rand_abstract::RandAbstract;
 use zomboid_engine::zombie::iso::cell_loader::{self, LoadContext};
 use zomboid_engine::zombie::iso::iso_chunk::IsoChunk;
@@ -242,7 +243,23 @@ pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Sc
             }
         }
     }
-    let atlas = build_atlas(root, &wanted, 8192, 8192).map_err(|e| anyhow!(e))?;
+    // Texture packs through the engine's file access (disk natively, the mounted files in the browser), 2x packs first.
+    let pack_dir = root.join("media").join("texturepacks");
+    let mut names: Vec<String> = vfs::read_dir(&pack_dir)?
+        .into_iter()
+        .filter(|n| n.ends_with(".pack"))
+        .collect();
+    names.sort_by_key(|n| pack_order(n));
+    let mut packs = names.into_iter().map(|n| {
+        let p = pack_dir.join(&n);
+        // In the browser a pack is dropped from memory once read.
+        vfs::take(&p)
+            .map(Ok)
+            .unwrap_or_else(|| vfs::read(&p))
+            .map(|b| (n, b))
+            .map_err(|e| e.to_string())
+    });
+    let atlas = build_atlas_from(&mut packs, &wanted, 8192, 8192).map_err(|e| anyhow!(e))?;
     let mut collision = Collision::default();
     {
         let mut grid = RegionGrid(std::collections::HashMap::new());

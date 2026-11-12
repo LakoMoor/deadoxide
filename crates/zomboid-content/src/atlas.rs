@@ -55,16 +55,33 @@ pub fn build_atlas(
         .map(|e| e.path())
         .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("pack"))
         .collect();
-    files.sort_by_key(|p| {
-        let n = p.file_name().unwrap().to_string_lossy().to_string();
-        (!n.contains("2x"), n)
+    files.sort_by_key(|p| pack_order(&p.file_name().unwrap().to_string_lossy()));
+    let mut packs = files.into_iter().map(|p| {
+        std::fs::read(&p)
+            .map(|b| (p.display().to_string(), b))
+            .map_err(|e| e.to_string())
     });
+    build_atlas_from(&mut packs, wanted, atlas_width, max_height)
+}
+
+/// Order in which packs are searched: 2x packs first, then by name.
+pub fn pack_order(file_name: &str) -> (bool, String) {
+    (!file_name.contains("2x"), file_name.to_string())
+}
+
+/// `build_atlas` over packs supplied by the caller as (name, bytes), already in search order.
+pub fn build_atlas_from(
+    packs: &mut dyn Iterator<Item = Result<(String, Vec<u8>), String>>,
+    wanted: &HashSet<String>,
+    atlas_width: u32,
+    max_height: u32,
+) -> Result<Atlas, String> {
     let found: HashMap<String, (Vec<u8>, u32, SubTexture)> = HashMap::new(); // name -> (page rgba shared? copy rect later)
     let mut pages: Vec<(Vec<u8>, u32)> = vec![];
     let mut sel: Vec<(String, usize, SubTexture)> = vec![];
-    for p in files {
-        let b = std::fs::read(&p).map_err(|e| e.to_string())?;
-        for pg in parse_pack(&b).map_err(|e| format!("{}: {e:?}", p.display()))? {
+    for pack in packs {
+        let (name, b) = pack?;
+        for pg in parse_pack(&b).map_err(|e| format!("{name}: {e:?}"))? {
             let hits: Vec<_> = pg
                 .entries
                 .iter()

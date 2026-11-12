@@ -93,18 +93,11 @@ impl MapFiles {
     /// Names are taken in the order the OS lists them, as `File.list` does; that order decides ties in the
     /// HashMap-ordered walks of the original (`consolidateBuildings`).
     pub fn load(&mut self, fixed2x: bool) -> Result<bool, String> {
-        if !self.map_directory_absolute_path.is_dir() {
+        if !crate::vfs::is_dir(&self.map_directory_absolute_path) {
             return Ok(false);
         }
-        let mut names: Vec<String> = Vec::new();
-        for e in std::fs::read_dir(&self.map_directory_absolute_path).map_err(|e| e.to_string())? {
-            names.push(
-                e.map_err(|e| e.to_string())?
-                    .file_name()
-                    .to_string_lossy()
-                    .into_owned(),
-            );
-        }
+        let names =
+            crate::vfs::read_dir(&self.map_directory_absolute_path).map_err(|e| e.to_string())?;
         for file_name in names {
             if file_name.ends_with(".lotheader") {
                 let info = self.create_lot_header(fixed2x, &file_name)?;

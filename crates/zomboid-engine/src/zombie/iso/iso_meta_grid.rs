@@ -132,7 +132,7 @@ impl IsoMetaGrid {
         self.map_files.clear();
         for (i, lot_dir) in lot_dirs.iter().enumerate() {
             let path = media.join("maps").join(lot_dir);
-            if path.is_dir() {
+            if crate::vfs::is_dir(&path) {
                 self.map_files.push(MapFiles::new(lot_dir, &path, i));
             }
         }
@@ -281,7 +281,7 @@ impl IsoMetaGrid {
                     else {
                         continue;
                     };
-                    let Ok(data) = std::fs::read(&path) else {
+                    let Ok(data) = crate::vfs::read(&path) else {
                         continue;
                     };
                     let v = voronoi_values(w_x, w_y);
