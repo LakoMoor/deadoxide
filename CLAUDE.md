@@ -28,7 +28,7 @@ Status and every measured/UNKNOWN fact: [docs/COMPATIBILITY.md](docs/COMPATIBILI
 |---|---|
 | `zomboid-engine` | The direct port. `src/zombie/**` mirrors the Java packages (`zombie.iso.IsoWorld` → `zombie/iso/iso_world.rs`); `src/java.rs` holds JDK semantics (String.trim, parseInt, java.util.Random); `src/bin/pz-dump.rs` prints state for oracle diffs. New gameplay code goes here; the older crates below get rewired onto it. |
 | `zomboid-content` | Real-file readers: `lot` (LOTH/LOTP), `pack` (PZPK), `atlas` (sprite atlas), `script` (script blocks), `tiledefs`, `zones` (objects.lua). Window-free. |
-| `zomboid-client` | `scene.rs` (cells → instances, collision, zone/marker overlays), `sim.rs` (deterministic world, collision, RNG), `main.rs` + `shader.wgsl` (wgpu window and offscreen `--shot`). |
+| `zomboid-client` | `scene.rs` (engine chunks → instances, collision, zone/marker overlays), `sim.rs` (deterministic world, collision, RNG), `main.rs` + `shader.wgsl` (wgpu window and offscreen `--shot`). |
 | `zomboid-lua` | Lua 5.1 harness over the game's own `media/lua`: PZ-style `require`, `prelude.lua` (Java stubs), `scripts.rs` (ScriptManager, Events), `text.rs` (translations). Runs the real `doMapZones`. |
 | `zomboid-ctl` | Inspection/oracle CLI: `check lots hist packs resolve tiledefs scripts render zones imgdiff`. |
 

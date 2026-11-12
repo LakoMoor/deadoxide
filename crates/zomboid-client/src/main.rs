@@ -755,6 +755,38 @@ fn main() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("fishing Lua API: {e}"))?;
         println!("fishing: loaded saved seeds and chum; fish abundance and other fishing APIs incomplete");
     }
+    if let Some(i) = a.iter().position(|s| s == "--save") {
+        let path = std::path::Path::new(&a[i + 1]);
+        let directory = if path.is_dir() {
+            path
+        } else {
+            path.parent().unwrap_or(path)
+        };
+        let zone_path = directory.join("map_zone.bin");
+        let sand_path = directory.join("map_sand.bin");
+        if zone_path.is_file() && sand_path.is_file() {
+            let load = || -> anyhow::Result<zomboid_lua::fishing::FishPopulation> {
+                let zones = zomboid_content::fishing_zones::parse_fishing_zones(&std::fs::read(
+                    &zone_path,
+                )?)
+                .map_err(|e| anyhow::anyhow!("{e}"))?;
+                let abundance =
+                    zomboid_content::sandbox::parse_fish_abundance(&std::fs::read(&sand_path)?)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
+                Ok(zomboid_lua::fishing::FishPopulation {
+                    abundance,
+                    zones: zones.zones,
+                })
+            };
+            match load() {
+                Ok(population) => match lua.set_fishing_population(population) {
+                    Ok(()) => println!("fishing: loaded saved fish abundance and rectangle zones"),
+                    Err(e) => eprintln!("fishing population unavailable: {e}"),
+                },
+                Err(e) => eprintln!("fishing population unavailable: {e}"),
+            }
+        }
+    }
     if let Some(i) = a.iter().position(|s| s == "--rng-seed") {
         let value = a
             .get(i + 1)

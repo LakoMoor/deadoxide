@@ -6,11 +6,17 @@ use crate::sim::{
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
 use std::path::Path;
-use zomboid_content::{
-    atlas::{build_atlas, Atlas},
-    lot::*,
-    tiledefs::TileDefs,
-};
+use zomboid_content::atlas::{build_atlas, Atlas};
+#[cfg(test)]
+use zomboid_content::tiledefs::TileDefs;
+use zomboid_engine::java;
+use zomboid_engine::zombie::core::random::rand_abstract::RandAbstract;
+use zomboid_engine::zombie::iso::cell_loader::{self, LoadContext};
+use zomboid_engine::zombie::iso::iso_chunk::IsoChunk;
+use zomboid_engine::zombie::iso::iso_meta_grid::AlarmSettings;
+use zomboid_engine::zombie::iso::iso_world::IsoWorld;
+use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::SpriteRef;
+use zomboid_engine::zombie::iso::sprite_details::iso_flag_type::IsoFlagType;
 
 /// Instance layout matches the shader: rect (x,y,w,h in world px), uv (u0,v0,u1,v1), atlas layer.
 #[repr(C)]
@@ -43,42 +49,48 @@ pub const LEVEL_PX: i32 = 192;
 
 /// zombie.iso.IsoGridSquare.CalculateCollide: collect the measured static square flags.
 /// Doors, windows, stairs and dynamic objects still need their own collision rules.
-fn tile_collision_flags(defs: &TileDefs, name: &str) -> u16 {
+fn collision_flags(has: impl Fn(&str) -> bool) -> u16 {
     let mut flags = 0;
-    if defs.has(name, "solid") || defs.has(name, "solidtrans") {
+    if has("solid") || has("solidtrans") {
         flags |= BLOCK;
     }
-    if defs.has(name, "solid") {
+    if has("solid") {
         flags |= SOLID;
     }
-    if defs.has(name, "solidtrans") {
+    if has("solidtrans") {
         flags |= SOLID_TRANS;
     }
-    if defs.has(name, "water") {
+    if has("water") {
         flags |= WATER;
     }
     if ["windowN", "windowW", "WindowN", "WindowW"]
         .iter()
-        .any(|prop| defs.has(name, prop))
+        .any(|prop| has(prop))
     {
         flags |= WINDOW;
     }
-    if defs.has(name, "windowN") || defs.has(name, "WindowN") {
+    if has("windowN") || has("WindowN") {
         flags |= WINDOW_N;
     }
-    if defs.has(name, "windowW") || defs.has(name, "WindowW") {
+    if has("windowW") || has("WindowW") {
         flags |= WINDOW_W;
     }
-    if defs.has(name, "HoppableN") || defs.has(name, "HoppableW") {
+    if has("HoppableN") || has("HoppableW") {
         flags |= HOPPABLE;
     }
-    if defs.has(name, "collideN") {
+    if has("collideN") {
         flags |= EDGE_N;
     }
-    if defs.has(name, "collideW") {
+    if has("collideW") {
         flags |= EDGE_W;
     }
     flags
+}
+
+/// The same mapping over raw `.tiles.txt` properties (the synthetic oracle tests use it).
+#[cfg(test)]
+fn tile_collision_flags(defs: &TileDefs, name: &str) -> u16 {
+    collision_flags(|prop| defs.has(name, prop))
 }
 
 /// Isometric world-pixel position of the top vertex of tile (gx, gy) on level z.
@@ -109,125 +121,177 @@ impl Scene {
     }
 }
 
-struct Cell {
-    names: Vec<String>,
-    chunks: Vec<Chunk>,
-    min_level: i32,
-    max_level: i32,
-    rooms: Vec<Room>,
-}
-
-fn read_cell(root: &Path, cx: i32, cy: i32) -> Result<Option<Cell>> {
-    let dir = root.join("media/maps/Muldraugh, KY");
-    let hp = dir.join(format!("{cx}_{cy}.lotheader"));
-    let pp = dir.join(format!("world_{cx}_{cy}.lotpack"));
-    if !hp.exists() || !pp.exists() {
-        return Ok(None);
-    }
-    let hb = std::fs::read(hp)?;
-    let h = parse_lotheader(&hb).map_err(|e| anyhow!("{e}"))?;
-    let d = parse_lotheader_dims(&hb, &h).map_err(|e| anyhow!("{e}"))?;
-    let pb = std::fs::read(pp)?;
-    let pk = parse_lotpack(&pb).map_err(|e| anyhow!("{e}"))?;
-    let mut chunks = Vec::with_capacity(1024);
-    for off in &pk.offsets {
-        chunks.push(
-            parse_chunk(&pb, *off as usize, d.min_level, d.max_level)
-                .map_err(|e| anyhow!("{e}"))?,
-        );
-    }
-    let (rooms, _) = parse_rooms(&hb, &h).map_err(|e| anyhow!("{e}"))?;
-    Ok(Some(Cell {
-        names: h.tile_names,
-        chunks,
-        min_level: d.min_level,
-        max_level: d.max_level,
-        rooms,
-    }))
+/// Collision flags of one object's sprite, read from the properties the ported tile-definition loader derived
+/// (`IsoWorld.LoadTileDefinitions`), e.g. `WallN` implies `collideN` there.
+fn sprite_collision_flags(world: &IsoWorld, spr: SpriteRef) -> u16 {
+    let p = &world.sprites.sprite(spr).properties;
+    collision_flags(|name| match IsoFlagType::from_string(name) {
+        IsoFlagType::MAX => p.has_str(&world.alias, name),
+        f => p.has(f) || p.has_str(&world.alias, name),
+    })
 }
 
 /// Load cells `x0..=x1` x `y0..=y1` (cell coordinates) into one scene in global painter's order.
+/// Squares and objects come from the direct port (`zomboid-engine`): `CellLoader.LoadCellBinaryChunk` per chunk, so
+/// object order, overlays, open curtains, removed trees and table stacking are the original's. `Rand` is seeded with a
+/// fixed value here; random fields (locks, tints) are therefore the same on every run and tints are not drawn yet.
 pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Scene> {
-    let mut cells = std::collections::HashMap::new();
-    let mut wanted: HashSet<String> = HashSet::new();
+    let mut rand = RandAbstract::new(java::Random::new(1));
+    let alarm = AlarmSettings {
+        last_stand: false,
+        power_grid_exists: true,
+        alarm: 4,
+        alarm_decay: 1,
+    };
+    let mut world = IsoWorld::init(root, "Muldraugh, KY", &|_| true, &alarm, &mut rand)
+        .map_err(|e| anyhow!(e))?;
+    for l in &world.log {
+        log::warn!("{l}");
+    }
+    let IsoWorld {
+        sprites,
+        alias,
+        tile_definitions,
+        meta_grid,
+        ..
+    } = &mut world;
+    let mut ctx = LoadContext {
+        sprites,
+        alias,
+        glass_removed_window_sprite_map: &tile_definitions.glass_removed_window_sprite_map,
+        smashed_window_sprite_map: &tile_definitions.smashed_window_sprite_map,
+        meta_grid,
+        rand: &mut rand,
+        locked_houses: 4,
+        missing_tiles: Vec::new(),
+        lotpack_cache: None,
+    };
+    let mut chunks = Vec::new();
     let (mut zmin, mut zmax) = (i32::MAX, i32::MIN);
-    for cy in y0..=y1 {
-        for cx in x0..=x1 {
-            if let Some(c) = read_cell(root, cx, cy)? {
-                wanted.extend(c.names.iter().cloned());
-                zmin = zmin.min(c.min_level);
-                zmax = zmax.max(c.max_level);
-                cells.insert((cx, cy), c);
+    for cx in x0..=x1 {
+        for cy in y0..=y1 {
+            if ctx.meta_grid.get_header(cx, cy).is_none() {
+                continue;
+            }
+            for wx in cx * 32..cx * 32 + 32 {
+                for wy in cy * 32..cy * 32 + 32 {
+                    let mut ch = IsoChunk::new(wx, wy);
+                    let mut errors = Vec::new();
+                    cell_loader::load_cell_binary_chunk(&mut ctx, wx, wy, &mut ch, &mut errors);
+                    for e in errors {
+                        log::warn!("chunk {wx},{wy}: {e}");
+                    }
+                    zmin = zmin.min(ch.get_min_level());
+                    zmax = zmax.max(ch.get_max_level());
+                    chunks.push(ch);
+                }
             }
         }
     }
-    if cells.is_empty() {
+    if chunks.is_empty() {
         return Err(anyhow!("no cells in region {x0},{y0}..{x1},{y1}"));
     }
+    let missing = ctx.missing_tiles.len() as u64;
+    drop(ctx);
+
+    let mut wanted: HashSet<String> = HashSet::new();
+    for ch in &chunks {
+        for z in ch.get_min_level()..=ch.get_max_level() {
+            for i in 0..64 {
+                let Some(sq) = ch.get_grid_square(i % 8, i / 8, z) else {
+                    continue;
+                };
+                for o in &sq.objects {
+                    for s in o
+                        .sprite
+                        .iter()
+                        .chain(o.attached_anim_sprite.iter().flatten())
+                    {
+                        wanted.extend(world.sprites.sprite(*s).name.clone());
+                    }
+                }
+            }
+        }
+    }
     let atlas = build_atlas(root, &wanted, 8192, 8192).map_err(|e| anyhow!(e))?;
-    let defs = TileDefs::load(root)?;
     let mut collision = Collision::default();
     let (aw, ah) = (atlas.width as f32, atlas.height as f32);
     let mut instances = Vec::new();
     let mut level_ranges = vec![];
-    let mut unresolved = 0u64;
+    let mut unresolved = missing;
     let mut meta = Vec::new();
-    // rooms come from the cell header (rect lists per floor), numbered uniquely across the region
+    // Room of every square inside a room rect (also squares without tiles), numbered by the meta grid's room handle.
     let mut rooms = std::collections::HashMap::new();
-    let mut next_room = 0;
-    for ((cx, cy), cell) in &cells {
-        for r in &cell.rooms {
-            for &(rx, ry, rw, rh) in &r.rects {
-                for yy in ry..ry + rh {
-                    for xx in rx..rx + rw {
-                        rooms.insert((cx * 256 + xx, cy * 256 + yy, r.level), next_room);
+    for cy in y0..=y1 {
+        for cx in x0..=x1 {
+            let Some(cell) = world.meta_grid.get_cell_data(cx, cy) else {
+                continue;
+            };
+            for r in &cell.room_list {
+                let def = world.meta_grid.room(*r);
+                for q in &def.rects {
+                    for yy in q.y..q.y + q.h {
+                        for xx in q.x..q.x + q.w {
+                            rooms.insert((xx, yy, def.level), r.0 as i32);
+                        }
                     }
                 }
             }
-            next_room += 1;
         }
     }
+    let by_pos: std::collections::HashMap<(i32, i32), &IsoChunk> =
+        chunks.iter().map(|c| ((c.wx, c.wy), c)).collect();
     for z in zmin..=zmax {
         level_ranges.push(instances.len() as u32);
         for gy in y0 * 256..(y1 + 1) * 256 {
             for gx in x0 * 256..(x1 + 1) * 256 {
-                let Some(cell) = cells.get(&(gx.div_euclid(256), gy.div_euclid(256))) else {
+                let Some(ch) = by_pos.get(&(gx.div_euclid(8), gy.div_euclid(8))) else {
                     continue;
                 };
-                if z < cell.min_level || z > cell.max_level {
-                    continue;
-                }
-                let (sx, sy) = (gx.rem_euclid(256), gy.rem_euclid(256));
-                let Some(sq) = &cell.chunks[((sx / 8) * 32 + sy / 8) as usize].levels
-                    [(z - cell.min_level) as usize][((sx % 8) * 8 + sy % 8) as usize]
-                else {
+                let Some(sq) = ch.get_grid_square(gx.rem_euclid(8), gy.rem_euclid(8), z) else {
                     continue;
                 };
                 let p = iso(gx as f32, gy as f32, z);
                 let (px, py) = (p[0] as i32, p[1] as i32);
-                for &t in &sq.tiles {
-                    let nm = &cell.names[t as usize];
-                    let fl = tile_collision_flags(&defs, nm);
-                    if fl != 0 {
-                        collision.add(gx, gy, z, fl);
+                let room = rooms.get(&(gx, gy, z)).copied().unwrap_or(-1);
+                for o in &sq.objects {
+                    for (k, spr) in o
+                        .sprite
+                        .iter()
+                        .chain(o.attached_anim_sprite.iter().flatten())
+                        .enumerate()
+                    {
+                        if k == 0 {
+                            let fl = sprite_collision_flags(&world, *spr);
+                            if fl != 0 {
+                                collision.add(gx, gy, z, fl);
+                            }
+                        }
+                        let Some(s) = world
+                            .sprites
+                            .sprite(*spr)
+                            .name
+                            .as_ref()
+                            .and_then(|n| atlas.sprites.get(n))
+                        else {
+                            unresolved += 1;
+                            continue;
+                        };
+                        let x = (px - s.orig_w / 2 + s.off_x) as f32;
+                        // renderYOffset (table stacking) is in unscaled pixels; the original multiplies by Core.tileScale (2).
+                        let y = (py + TILE_H - s.orig_h + s.off_y) as f32 - o.render_y_offset * 2.0;
+                        meta.push((gx, gy, z, room));
+                        instances.push(Instance {
+                            rect: [x, y, s.w as f32, s.h as f32],
+                            uv: [
+                                s.ax as f32 / aw,
+                                s.ay as f32 / ah,
+                                (s.ax as i32 + s.w) as f32 / aw,
+                                (s.ay as i32 + s.h) as f32 / ah,
+                            ],
+                            layer: s.layer as f32,
+                        });
                     }
-                    let Some(s) = atlas.sprites.get(nm) else {
-                        unresolved += 1;
-                        continue;
-                    };
-                    let x = (px - s.orig_w / 2 + s.off_x) as f32;
-                    let y = (py + TILE_H - s.orig_h + s.off_y) as f32;
-                    meta.push((gx, gy, z, rooms.get(&(gx, gy, z)).copied().unwrap_or(-1)));
-                    instances.push(Instance {
-                        rect: [x, y, s.w as f32, s.h as f32],
-                        uv: [
-                            s.ax as f32 / aw,
-                            s.ay as f32 / ah,
-                            (s.ax as i32 + s.w) as f32 / aw,
-                            (s.ay as i32 + s.h) as f32 / ah,
-                        ],
-                        layer: s.layer as f32,
-                    });
                 }
             }
         }
@@ -388,28 +452,8 @@ mod collision_oracle_tests {
     #[ignore = "real-content acceptance: loads a complete cell and texture atlas"]
     fn real_water_square_is_wired_into_loaded_scene() -> anyhow::Result<()> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        let cell = read_cell(&root, 0, 18)?.ok_or_else(|| anyhow!("cell 0_18 missing"))?;
-        let water_id =
-            cell.names
-                .iter()
-                .position(|name| name == "blends_natural_02_0")
-                .ok_or_else(|| anyhow!("water tile missing from cell header"))? as i32;
-        let mut found = None;
-        'outer: for sx in 1..255 {
-            for sy in 1..255 {
-                let chunk = &cell.chunks[((sx / 8) * 32 + sy / 8) as usize];
-                let Some(square) =
-                    &chunk.levels[(0 - cell.min_level) as usize][((sx % 8) * 8 + sy % 8) as usize]
-                else {
-                    continue;
-                };
-                if square.tiles.contains(&water_id) {
-                    found = Some((sx, 18 * 256 + sy));
-                    break 'outer;
-                }
-            }
-        }
-        let (x, y) = found.ok_or_else(|| anyhow!("water tile not used on z=0"))?;
+        // (1, 4803, 0) holds the water tile blends_natural_02_0: found by scanning the lotpack of cell 0_18 (2026-11-11).
+        let (x, y) = (1, 4803);
         let scene = load_region(&root, 0, 18, 0, 18)?;
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             assert!(

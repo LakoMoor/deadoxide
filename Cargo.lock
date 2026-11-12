@@ -7452,6 +7452,7 @@ dependencies = [
  "wgpu",
  "winit",
  "zomboid-content",
+ "zomboid-engine",
  "zomboid-lua",
 ]
 

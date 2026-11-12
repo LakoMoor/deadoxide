@@ -898,3 +898,75 @@ fn set_open_door_properties(
         }
     }
 }
+
+/// zombie.iso.IsoWorld: the loaded world's tables. So far what `init` builds before the first cell is loaded:
+/// tile definitions and the meta grid. Mods, scripts, Lua events, world generation and basements are not part of it yet.
+pub struct IsoWorld {
+    pub sprites: IsoSpriteManager,
+    pub alias: TilePropertyAliasMap,
+    pub tile_definitions: TileDefinitions,
+    pub meta_grid: crate::zombie::iso::iso_meta_grid::IsoMetaGrid,
+    /// Problems the original would log and continue past.
+    pub log: Vec<String>,
+}
+
+impl IsoWorld {
+    /// zombie.iso.IsoWorld.init, the ported part: the tile-definition sequence, then `IsoMetaGrid.Create` for
+    /// `game_map` (`Core.gameMap`). `has_texture` answers whether a texture of that name exists (always false on a
+    /// dedicated server). `rand` is `Rand`.
+    pub fn init<R: crate::java::JavaRandom>(
+        root: &std::path::Path,
+        game_map: &str,
+        has_texture: &dyn Fn(&str) -> bool,
+        alarm: &crate::zombie::iso::iso_meta_grid::AlarmSettings,
+        rand: &mut crate::zombie::core::random::rand_abstract::RandAbstract<R>,
+    ) -> Result<Self, String> {
+        use crate::zombie::iso::iso_meta_grid::IsoMetaGrid;
+        let media = root.join("media");
+        let mut log = Vec::new();
+        let mut files = Vec::new();
+        for (f, n) in VANILLA_TILE_DEFINITION_FILES {
+            let p = media.join(f);
+            files.push((
+                f,
+                n,
+                std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?,
+            ));
+        }
+        let mut tile_definitions = TileDefinitions::default();
+        let mut alias = TilePropertyAliasMap::default();
+        let mut sprites = IsoSpriteManager::new();
+        for (f, n, data) in &files {
+            if let Err(e) = tile_definitions.load_tile_definitions_property_strings(data, f, *n) {
+                log.push(format!("{f}: {e}"));
+            }
+        }
+        tile_definitions.set_custom_property_values()?;
+        tile_definitions.generate_tile_property_lookup_tables(&mut alias, &[]);
+        for (f, n, data) in &files {
+            if let Err(e) = load_tile_definitions(&mut sprites, &alias, data, f, *n) {
+                log.push(format!("{f}: {e}"));
+            }
+        }
+        register_fake_jumbo_tree(&mut sprites, &alias, 7);
+        sprites.add_sprite("media/ui/missing-tile.png");
+        tile_definitions.loaded_tile_definitions(&mut sprites, &alias, has_texture)?;
+
+        let mut meta_grid = IsoMetaGrid::default();
+        let dirs = IsoMetaGrid::lot_directories(&media, game_map);
+        meta_grid.create_step1(&media, &dirs, (-250, -250, 250, 250))?;
+        log.extend(meta_grid.load_all_cells(&mut |n| rand.next(n), &mut |_, _| Vec::new()));
+        // Two closures over one generator: draws happen strictly one after another.
+        let cell = std::cell::RefCell::new(rand);
+        meta_grid.create_step2(alarm, &mut |n| cell.borrow_mut().next(n), &mut |a, b| {
+            cell.borrow_mut().next_range(a, b)
+        });
+        Ok(IsoWorld {
+            sprites,
+            alias,
+            tile_definitions,
+            meta_grid,
+            log,
+        })
+    }
+}

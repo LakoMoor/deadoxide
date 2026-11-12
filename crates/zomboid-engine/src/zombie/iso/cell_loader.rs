@@ -36,6 +36,8 @@ pub struct LoadContext<'a, R: JavaRandom> {
     pub locked_houses: i32,
     /// Tile names with no sprite definition ("Missing tile definition" in the original's log).
     pub missing_tiles: Vec<String>,
+    /// The lotpack read last (the original keeps the file open in the pooled `IsoLot`).
+    pub lotpack_cache: Option<(std::path::PathBuf, Vec<u8>)>,
 }
 
 fn nfe(s: &str) -> String {
@@ -651,8 +653,11 @@ pub fn load_cell_binary_chunk<R: JavaRandom>(
             }
             continue;
         };
-        let pack = std::fs::read(&path);
-        if let Ok(pack) = &pack {
+        if ctx.lotpack_cache.as_ref().is_none_or(|c| c.0 != path) {
+            ctx.lotpack_cache = std::fs::read(&path).ok().map(|d| (path.clone(), d));
+        }
+        let cached = ctx.lotpack_cache.take();
+        if let Some((_, pack)) = &cached {
             if let Some(e) = lot.load(&info, pack, cell_x, cell_y, wx, wy) {
                 errors.push(e);
             }
@@ -672,6 +677,7 @@ pub fn load_cell_binary_chunk<R: JavaRandom>(
             ctx.meta_grid.map_files[i]
                 .info_headers
                 .insert(header_name.clone(), info);
+            ctx.lotpack_cache = cached;
             placed_first = true;
             if non_empty_square_count == 64 {
                 break;

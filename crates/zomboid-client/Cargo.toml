@@ -15,6 +15,7 @@ png = "0.17"
 chrono = "0.4.45"
 
 zomboid-content = { path = "../zomboid-content" }
+zomboid-engine = { path = "../zomboid-engine" }
 zomboid-lua = { path = "../zomboid-lua" }
 
 [dev-dependencies]

@@ -520,6 +520,7 @@ pub fn chunkobjects(root: &Path, range: &[String]) -> Result<String, String> {
         rand: &mut rand,
         locked_houses: 6,
         missing_tiles: Vec::new(),
+        lotpack_cache: None,
     };
     let mut sb = String::new();
     let _ = writeln!(sb, "O lockedHouses={}", ctx.locked_houses);
