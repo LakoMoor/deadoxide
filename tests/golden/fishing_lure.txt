@@ -1,0 +1,2 @@
+LURE before=trash,true
+LURE after=fish,false

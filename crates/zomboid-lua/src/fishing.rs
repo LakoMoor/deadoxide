@@ -235,6 +235,7 @@ pub fn saved_trash_seed(path: &Path) -> std::io::Result<i32> {
 /// Runtime portion of FishSchoolManager supported by this port.
 pub struct FishingRuntime {
     pub fish_seed: i32,
+    no_fish_zones: Vec<[i32; 4]>,
     pub random: Option<zomboid_content::rng::CellularRng>,
     pub chum: ChumState,
     pub calendar_minutes: Option<i32>,
@@ -242,10 +243,81 @@ pub struct FishingRuntime {
 
 pub type SharedFishingRuntime = Rc<RefCell<FishingRuntime>>;
 
+/// zombie.iso.FishSchoolManager.isNoFishZone: original lazily caches Lua zones.
+fn no_fish_zones(lua: &Lua, fishing: &mut FishingRuntime) -> Result<bool> {
+    if !fishing.no_fish_zones.is_empty() {
+        return Ok(false);
+    }
+    let Value::Table(table) = lua.globals().get::<Value>("Fishing")? else {
+        return Ok(true);
+    };
+    let Value::Table(zones) = table.get::<Value>("NoFishZones")? else {
+        return Ok(true);
+    };
+    // Original loops raw indexes 0..size, exclusive of size; in a contiguous
+    // 1-based table the final entry is therefore not loaded.
+    for index in 0..zones.raw_len() {
+        let value: Value = zones.raw_get(index)?;
+        if let Value::Table(zone) = value {
+            fishing.no_fish_zones.push([
+                zone.get("x1")?,
+                zone.get("y1")?,
+                zone.get("x2")?,
+                zone.get("y2")?,
+            ]);
+        }
+    }
+    Ok(false)
+}
+
+/// zombie.iso.FishSchoolManager.getFishAbundance: exact supported branch where
+/// no eligible natural fish point requires unimplemented saved zone lookup.
+fn fish_abundance(lua: &Lua, fishing: &mut FishingRuntime, x: i32, y: i32) -> Result<f64> {
+    let all_excluded = no_fish_zones(lua, fishing)?;
+    if !all_excluded {
+        for i in -6_i32..=6 {
+            for j in -6_i32..=6 {
+                let px = x.wrapping_add(i);
+                let py = y.wrapping_add(j);
+                let excluded = fishing
+                    .no_fish_zones
+                    .iter()
+                    .any(|z| px >= z[0] && px <= z[2] && py >= z[1] && py <= z[3]);
+                if excluded
+                    || random_float(px as i64, py as i64, fishing.fish_seed as i64) <= 0.995_f32
+                {
+                    continue;
+                }
+                let dx = px as f32 - x as f32;
+                let dy = py as f32 - y as f32;
+                let distance = ((dx * dx + dy * dy) as f64).sqrt();
+                let radius = (random_float(
+                    px as i64,
+                    py as i64,
+                    fishing.fish_seed.wrapping_add(6599) as i64,
+                ) + 2.0_f32) as f64;
+                if distance <= radius + 1.5 {
+                    return Err(mlua::Error::runtime(
+                        "fish abundance needs saved fishing zone state, not yet implemented",
+                    ));
+                }
+            }
+        }
+    }
+    let now = fishing
+        .calendar_minutes
+        .ok_or_else(|| mlua::Error::runtime("game calendar unavailable for fish abundance"))?;
+    Ok(fishing
+        .chum
+        .contribution(x, y, now, &std::collections::HashSet::new())
+        .max(0) as f64)
+}
+
 /// Install the supported FishSchoolManager methods with restored chum state.
 pub fn install_saved(lua: &Lua, save: &FishingSave) -> Result<SharedFishingRuntime> {
     let state = Rc::new(RefCell::new(FishingRuntime {
         fish_seed: save.seed,
+        no_fish_zones: Vec::new(),
         random: None,
         chum: ChumState::from_save(save),
         calendar_minutes: None,
@@ -256,6 +328,13 @@ pub fn install_saved(lua: &Lua, save: &FishingSave) -> Result<SharedFishingRunti
         "getTrashAbundance",
         lua.create_function(move |_, (_self, x, y): (Value, i32, i32)| {
             Ok(trash_abundance(trash_seed, x, y))
+        })?,
+    )?;
+    let shared = state.clone();
+    manager.set(
+        "getFishAbundance",
+        lua.create_function(move |lua, (_self, x, y): (Value, i32, i32)| {
+            fish_abundance(lua, &mut shared.borrow_mut(), x, y)
         })?,
     )?;
     let shared = state.clone();
@@ -309,6 +388,131 @@ pub fn install(lua: &Lua, trash_seed: i32) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "requires installed original fishing Lua"]
+    fn real_lure_selection_uses_chum_and_matches_original() -> Result<()> {
+        let lua = Lua::new();
+        let state = install_saved(
+            &lua,
+            &FishingSave {
+                seed: 1485,
+                trash_seed: 41859,
+                chum: vec![],
+            },
+        )?;
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../media/lua/shared/Fishing");
+        for name in ["FishingZones.lua", "Fish.lua"] {
+            let source = std::fs::read_to_string(root.join(name)).map_err(mlua::Error::external)?;
+            lua.load(&source).set_name(name).exec()?;
+        }
+        lua.load("Fishing.Utils={skillSizeLimit={[1]=100}}; Fishing.fishes={{name='fish',maxWeight=1,isPredator=false,isLake=true,lure={worm=1}}}; Fishing.trashItems={'trash'}; setGameSpeed=function() end; getGameTime=function() return {setMultiplier=function() end} end; ZombRandFloat=function() return 0.5 end; ZombRand=function() return 0 end; subject={x=8306,y=11692,fishingLvl=1,isRiver=false,isReel=false,lure='worm'}; function selectFish() local item,trash=Fishing.Fish.getFishByLure(subject); return type(item)=='table' and item.name or item,trash end").exec()?;
+        let select: mlua::Function = lua.globals().get("selectFish")?;
+        state.borrow_mut().calendar_minutes = Some(0);
+        let (before, before_trash): (String, bool) = select.call(())?;
+        lua.load("FishSchoolManager.getInstance():addChum(8306,11692,200)")
+            .exec()?;
+        state.borrow_mut().calendar_minutes = Some(60);
+        let (after, after_trash): (String, bool) = select.call(())?;
+        let actual =
+            format!("LURE before={before},{before_trash}\nLURE after={after},{after_trash}\n");
+        assert_eq!(
+            actual,
+            include_str!("../../../tests/golden/fishing_lure.txt")
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "requires installed original FishingZones.lua"]
+    fn original_fishing_zones_and_supported_abundance() -> Result<()> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../media/lua/shared/Fishing/FishingZones.lua");
+        let source = std::fs::read_to_string(path).map_err(mlua::Error::external)?;
+        let lua = Lua::new();
+        let state = install_saved(
+            &lua,
+            &FishingSave {
+                seed: 1485,
+                trash_seed: 41859,
+                chum: vec![],
+            },
+        )?;
+        lua.load(&source).exec()?;
+        assert!(!no_fish_zones(&lua, &mut state.borrow_mut())?);
+        let zone_fixture = include_str!("../../../tests/golden/fishing_no_fish_zones.txt");
+        let binding = state.borrow();
+        let zones = &binding.no_fish_zones;
+        assert_eq!(zones.len(), 13);
+        for line in zone_fixture
+            .lines()
+            .filter_map(|line| line.strip_prefix("POINT "))
+        {
+            let (coordinates, expected) = line.split_once('=').unwrap();
+            let (x, y) = coordinates.split_once(',').unwrap();
+            let x: i32 = x.parse().unwrap();
+            let y: i32 = y.parse().unwrap();
+            let actual = zones
+                .iter()
+                .any(|z| x >= z[0] && x <= z[2] && y >= z[1] && y <= z[3]);
+            assert_eq!(actual, expected.parse::<bool>().unwrap(), "{line}");
+        }
+        drop(binding);
+        let action: mlua::Function = lua.load("return function(x,y) return FishSchoolManager.getInstance():getFishAbundance(x,y) end").eval()?;
+        let mut checked = 0;
+        for line in include_str!("../../../tests/golden/fishing_abundance_partial.txt").lines() {
+            let (label, body) = line.split_once(' ').unwrap();
+            let (input, expected) = body.split_once('=').unwrap();
+            let mut fields = input.split(',');
+            let seed = fields.next().unwrap().parse().unwrap();
+            let x = fields.next().unwrap().parse().unwrap();
+            let y = fields.next().unwrap().parse().unwrap();
+            {
+                let mut fish = state.borrow_mut();
+                fish.fish_seed = seed;
+                fish.chum = ChumState::default();
+                fish.chum.add(x, y, 200, 0);
+                fish.calendar_minutes = Some(60);
+            }
+            let result = action.call::<f64>((x, y));
+            if label == "ABUND" {
+                assert_eq!(result?, expected.parse::<f64>().unwrap(), "{line}");
+            } else {
+                assert!(
+                    result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("saved fishing zone state"),
+                    "{line}"
+                );
+            }
+            checked += 1;
+        }
+        assert_eq!(checked, 28);
+        Ok(())
+    }
+
+    #[test]
+    fn missing_lua_zones_exclude_fish_and_chum_is_visible() -> Result<()> {
+        let lua = Lua::new();
+        let state = install_saved(
+            &lua,
+            &FishingSave {
+                seed: 1485,
+                trash_seed: 0,
+                chum: vec![],
+            },
+        )?;
+        state.borrow_mut().calendar_minutes = Some(0);
+        lua.load("FishSchoolManager.getInstance():addChum(100,100,200)")
+            .exec()?;
+        state.borrow_mut().calendar_minutes = Some(60);
+        let value: f64 = lua
+            .load("return FishSchoolManager.getInstance():getFishAbundance(100,100)")
+            .eval()?;
+        assert_eq!(value, 9.0);
+        Ok(())
+    }
+
     #[test]
     #[ignore = "requires installed original game Lua"]
     fn real_chum_action_matches_original_with_test_doubles() -> Result<()> {

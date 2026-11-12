@@ -37,7 +37,8 @@
         "Fishing save reader handles both seeds and chum records; compared with a real isolated save and a controlled file written by the original",
         "Chum contribution, noise suppression and expiration checked against selected original Java cases; not yet connected to the client fishing loop",
         "Restored chum state and Lua addChum now follow the partial World clock; selected original UTC calendar and real Lua action cases match with explicit test doubles",
-        "Original seeded cellular RNG matches 70 selected Java outputs and drives four measured Lua fishing daily seed updates in an opt-in controlled mode"
+        "Original seeded cellular RNG matches 70 selected Java outputs and drives four measured Lua fishing daily seed updates in an opt-in controlled mode",
+        "Lua fish abundance now includes chum in supported positions, and a controlled real Fish.lua lure-selection scenario matches the original; natural fish zones remain incomplete"
       ]
     },
     {

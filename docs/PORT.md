@@ -169,3 +169,7 @@ The saved fishing state now reaches the client Lua manager; `addChum` uses a gam
 ### Original cellular random stream (2026-11-12)
 
 Added the original seeded cellular generator and bounded integer operation, validated against 70 Java outputs; its rule is read from the installed JAR, not stored in this repository. The original FishingUtils daily callback also matches four controlled seed updates. An explicit client seed enables this experimental path, but the game's global consumer order and other RNG functions are not integrated. See the compatibility ledger.
+
+### Partial Lua fish abundance and lure selection (2026-11-12)
+
+Connected `getFishAbundance` to restored and newly added chum where no eligible natural fish point needs saved zone state. The installed FishingZones.lua and Fish.lua now run through a controlled chum-to-lure-selection scenario matching the Java original. Other positions explicitly error until fishing zone state is ported; no-fish-zone indexing reproduces the measured original behavior. See the ledger for fixtures and limitations.

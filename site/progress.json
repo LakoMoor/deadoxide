@@ -60,7 +60,7 @@
         "26 cardinal, 32,768 diagonal, 256 water, 256 water-window, 4,096 window-flag, 8,192 mixed-solid and 9,216 adjacent-window static cases checked against the original",
         "a real water square at (1, 4803, 0) checked through loaded scene collision; no original walk trace",
         "continuous player movement, sliding, doors, window objects and stairs: incomplete",
-        "fishing trash abundance: 75 selected original Java results and six from an isolated real save match; seeded cellular RNG matches 70 original draws; selected Lua fishing action and daily seed cases match under controlled conditions; full gameplay and shared RNG incomplete",
+        "fishing trash abundance: 75 selected original Java results and six from an isolated real save match; seeded RNG and selected Lua fishing action, chum abundance and lure selection cases match original under controlled conditions; natural fish zones and full gameplay incomplete",
         "zombies: placeholder",
         "inventory, crafting, skills, health: none"
       ],
@@ -131,6 +131,6 @@
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
     "goldenLogLines": 22,
-    "testsPassed": 65
+    "testsPassed": 66
   }
 }
