@@ -6,7 +6,8 @@ Status and every measured/UNKNOWN fact: [docs/COMPATIBILITY.md](docs/COMPATIBILI
 
 ## Rules that bite
 
-- **Never commit the game's files**: `media/`, `projectzomboid.jar`, decompiled sources (REA output), the `profile/` folder. The decompiled jar is a *hint*, never copied.
+- **Never commit the game's files**: `media/`, `projectzomboid.jar`, the Java text in `decompiled/`, the `profile/` folder, or oracle dumps (`target/oracle/`); only their sha256 goes in `tests/golden/engine/`.
+- **Method since 2026-11-12 (user's decision): port the decompiled Java directly**, class by class, into `crates/zomboid-engine` (`sh tools/decompile.sh` → `./decompiled`, git-ignored). Keep algorithms, operation order, int/float widths and RNG draws literal; restructure only ownership (handles instead of object references, explicit values instead of singletons). Then prove it: a Java probe runs the ORIGINAL class headless, `pz-dump` prints the Rust state in the same format, `sh tools/oracle.sh` must report them byte-identical.
 - **Isolate runs from real player data**: the game always starts with `-cachedir=<repo>/profile`. Ask before launching it (window focus); capture the client area only; kill only by exact PID. See the `zomboid-oracle` skill.
 - **No claim without an oracle diff.** "Matches" needs a command you ran and the conditions it covers (zoom, floor, time of day, position). Write UNKNOWN when unmeasured; correct wrong notes in place.
 - **Screenshots go to `screenshots/`.**
@@ -25,6 +26,7 @@ Status and every measured/UNKNOWN fact: [docs/COMPATIBILITY.md](docs/COMPATIBILI
 
 | Crate | Owns |
 |---|---|
+| `zomboid-engine` | The direct port. `src/zombie/**` mirrors the Java packages (`zombie.iso.IsoWorld` → `zombie/iso/iso_world.rs`); `src/java.rs` holds JDK semantics (String.trim, parseInt, java.util.Random); `src/bin/pz-dump.rs` prints state for oracle diffs. New gameplay code goes here; the older crates below get rewired onto it. |
 | `zomboid-content` | Real-file readers: `lot` (LOTH/LOTP), `pack` (PZPK), `atlas` (sprite atlas), `script` (script blocks), `tiledefs`, `zones` (objects.lua). Window-free. |
 | `zomboid-client` | `scene.rs` (cells → instances, collision, zone/marker overlays), `sim.rs` (deterministic world, collision, RNG), `main.rs` + `shader.wgsl` (wgpu window and offscreen `--shot`). |
 | `zomboid-lua` | Lua 5.1 harness over the game's own `media/lua`: PZ-style `require`, `prelude.lua` (Java stubs), `scripts.rs` (ScriptManager, Events), `text.rs` (translations). Runs the real `doMapZones`. |
@@ -34,6 +36,9 @@ Status and every measured/UNKNOWN fact: [docs/COMPATIBILITY.md](docs/COMPATIBILI
 
 ```sh
 export PATH="$HOME/.cargo/bin:$PATH"
+sh tools/decompile.sh        # once per jar: Vineflower -> ./decompiled (checks the jar hash against reference.lock.json)
+sh tools/oracle.sh [case]    # Java original vs Rust port, byte-for-byte; refreshes tests/golden/engine/*.sha256
+node tools/class_ledger.mjs  # docs/CLASS_LEDGER.md: which Java classes/methods the Rust code cites
 cargo test -q --release
 sh tests/lua_require_parity.sh
 cargo run -q --release -p zomboid-lua -- .. run

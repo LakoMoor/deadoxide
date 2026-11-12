@@ -1,0 +1,46 @@
+//! Checks the port against the ORIGINAL game's output without needing Java: `tools/oracle.sh` stores the sha256 of
+//! each Java probe's output once it is byte-identical to `pz-dump`; here the Rust side is recomputed over the
+//! player's install and must still hash to the same value. Needs the game in the workspace's parent folder.
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use sha2::{Digest, Sha256};
+
+fn game_root() -> Option<PathBuf> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    root.join("media/newtiledefinitions.tiles")
+        .exists()
+        .then_some(root)
+}
+
+fn check(case: &str) {
+    let Some(root) = game_root() else {
+        eprintln!("SKIPPED {case}: no game install next to the workspace");
+        return;
+    };
+    let want = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("../../tests/golden/engine/{case}.sha256")),
+    )
+    .expect("golden hash");
+    let out = Command::new(env!("CARGO_BIN_EXE_pz-dump"))
+        .arg(case)
+        .arg(&root)
+        .output()
+        .expect("run pz-dump");
+    assert!(
+        out.status.success(),
+        "pz-dump {case} failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let got: String = Sha256::digest(&out.stdout)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    assert_eq!(got, want.trim(), "{case}: Rust output no longer matches the original's (run sh tools/oracle.sh {case} for a diff)");
+}
+
+#[test]
+fn tiledefs_match_original() {
+    check("tiledefs");
+}

@@ -7475,6 +7475,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "zomboid-engine"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+]
+
+[[package]]
 name = "zomboid-lua"
 version = "0.1.0"
 dependencies = [

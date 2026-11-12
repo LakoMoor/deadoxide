@@ -27,7 +27,7 @@ fn long_end(src: &[u8], mut i: usize, equals: usize) -> usize {
     i
 }
 
-/// se.krka.kahlua.luaj.compiler.LexState: adapt observed decimal suffixes for Lua 5.1.
+/// Kahlua (se/krka/kahlua/luaj/compiler) LexState: adapt observed decimal suffixes for Lua 5.1.
 /// This is a narrow lexical shim, not a complete Kahlua lexer.
 pub(crate) fn strip_float_suffixes(src: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(src.len());

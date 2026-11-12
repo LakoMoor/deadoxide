@@ -2,6 +2,19 @@
 
 Model: https://github.com/horizon-rust/horizon (Minecraft Java reimplemented in Rust; reads the user's own install; ships no game assets; differential harnesses against the original).
 
+## Direct port from decompiled Java — current method (2026-11-12)
+
+Decided by the user: decompile the jar and port class by class (as Horizon does), instead of measuring behaviour probe by probe.
+
+- `sh tools/decompile.sh`: Vineflower 1.11.1 (sha256 pinned in the script) over the game-owned packages of the pinned jar → `./decompiled`: 3,424 files, 958,856 lines, 0 classes failed (`zombie` 745,743 lines, `generation` 193,704, `se.krka` Kahlua 11,151, `fmod` 7,607). Git-ignored.
+- `crates/zomboid-engine`: module tree mirrors `zombie.*`. Each item's doc comment opens with its Java symbol; `node tools/class_ledger.mjs` turns those into `docs/CLASS_LEDGER.md` (per-package counts; a citation is a pointer, not proof).
+- Proof is differential and whole-content: `sh tools/oracle.sh` runs a Java probe on the original class (headless, local Java 27, scratch cache dir) and `pz-dump` on the port over the same install, and requires identical bytes. `cargo test -p zomboid-engine` re-checks the Rust side against the stored sha256 without Java.
+- Order: leaves first along the path to a playable world: tile definitions → cell headers/rooms/buildings → chunk loading (`IsoLot`, `CellLoader`, `IsoChunk`) → `IsoGridSquare` properties/collision/visibility → moving objects and the player → zombies. Then inventory/scripts, UI (Lua on Kahlua semantics), sound, saves, vehicles, network.
+- Known limits of the method: natives (`PZBullet`, `PZPathFind`, `PZPopMan`, `Lighting`, `fmod`, `RakNet` DLLs) have no Java text and still need REA; anything touching GL, FMOD or the window cannot run in a headless probe and needs the live-game oracle (`zomboid-oracle` skill).
+
+### Slices done by direct port
+- [x] E1 tile definitions: `IsoWorld.LoadTileDefinitionsPropertyStrings/SetCustomPropertyValues/GenerateTilePropertyLookupTables/LoadTileDefinitions/setOpenDoorProperties/registerFakeJumboTree`, `PropertyContainer`, `TilePropertyAliasMap`, `IsoSpriteManager`, `IsoSprite` (data side), `IsoSpriteGrid`, `SpriteGridParseData`, `IsoFlagType`, `IsoObjectType`, `IsoDirections`, `FasciaEdge`, parts of `PZMath`/`StringUtils`, `RandAbstract`, `java.util.Random`. Oracle `tiledefs`: 61,228 sprites × (id, tile type, flags, properties, 14 booleans, fire requirement, burnt tile, wind type, render layer, tileset, index, parent name, fascia edge, sprite grid, surface values) byte-identical. Not covered by the oracle: `loadedTileDefinitions` (needs textures), mods' tile files, entity-script property values, `IsoDirections` angle functions, `RandAbstract`/`Random` (ported, no probe yet). Not yet wired into `zomboid-client`, which still reads `.tiles.txt` through `zomboid-content::tiledefs`.
+
 ## Mode / assumptions
 - Compatible runtime, loads original content from the user's install (build 25485521, see `reference.lock.json`).
 - Goal stated by user: full working game. This is a multi-year-scale scope; work proceeds in measured slices.
