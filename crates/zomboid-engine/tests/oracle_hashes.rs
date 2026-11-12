@@ -26,6 +26,7 @@ fn check(case: &str, args: &[&str]) {
     let out = Command::new(env!("CARGO_BIN_EXE_pz-dump"))
         .arg(case)
         .arg(&root)
+        .args(args)
         .output()
         .expect("run pz-dump");
     assert!(
