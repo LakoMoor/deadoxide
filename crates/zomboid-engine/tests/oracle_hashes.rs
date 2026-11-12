@@ -50,3 +50,8 @@ fn tiledefs_match_original() {
 fn lotheaders_match_original() {
     check("lotheaders", &["Muldraugh, KY"]);
 }
+
+#[test]
+fn lotpack_matches_original() {
+    check("lotpack", &["Muldraugh, KY", "30", "43", "34", "47"]);
+}

@@ -31,4 +31,7 @@ want=${1:-all}
 sel() { [ "$want" = all ] || [ "$want" = "$1" ]; }
 sel tiledefs && run_case tiledefs TileDefsProbe
 sel lotheaders && run_case lotheaders LotHeadersProbe "Muldraugh, KY"
+sel lotpack && run_case lotpack LotPackProbe "Muldraugh, KY" 30 43 34 47
+# the whole map (4.2 GB of lotpacks, minutes): sh tools/oracle.sh lotpack-all
+[ "$want" = lotpack-all ] && run_case lotpack LotPackProbe "Muldraugh, KY" 0 0 99 99
 exit $fail

@@ -1,12 +1,14 @@
 //! Dumps engine state in the exact text format of the Java probes in `tests/original_probe`, for byte-for-byte diffs.
 //!   pz-dump tiledefs <game root>                  (pairs with TileDefsProbe.java)
 //!   pz-dump lotheaders <game root> <map folder>   (pairs with LotHeadersProbe.java)
+//!   pz-dump lotpack <game root> <map folder> x1 y1 x2 y2   (pairs with LotPackProbe.java)
 use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::Path;
 
 use zomboid_engine::zombie::core::tile_property_alias_map::TilePropertyAliasMap;
 use zomboid_engine::zombie::game_states::choose_game_info;
+use zomboid_engine::zombie::iso::iso_lot::IsoLot;
 use zomboid_engine::zombie::iso::iso_meta_cell::IsoMetaCell;
 use zomboid_engine::zombie::iso::iso_meta_grid;
 use zomboid_engine::zombie::iso::iso_world::{
@@ -20,9 +22,8 @@ fn main() {
     let r = match a.get(1).map(String::as_str) {
         Some("tiledefs") if a.len() == 3 => tiledefs(Path::new(&a[2])),
         Some("lotheaders") if a.len() == 4 => lotheaders(Path::new(&a[2]), &a[3]),
-        _ => {
-            Err("usage: pz-dump tiledefs <game root> | lotheaders <game root> <map folder>".into())
-        }
+        Some("lotpack") if a.len() == 8 => lotpack(Path::new(&a[2]), &a[3], &a[4..8]),
+        _ => Err("usage: see the header of pz-dump.rs".into()),
     };
     match r {
         Ok(text) => {
@@ -270,6 +271,72 @@ pub fn lotheaders(root: &Path, dir: &str) -> Result<String, String> {
             }
             sb.push('\n');
             all[0].info_headers.insert(name, h);
+        }
+    }
+    Ok(sb)
+}
+
+/// Every chunk of a cell range through the port of IsoLot.load; pairs with LotPackProbe.java.
+pub fn lotpack(root: &Path, dir: &str, range: &[String]) -> Result<String, String> {
+    let r: Vec<i32> = range.iter().map(|s| s.parse::<i32>().map_err(|e| e.to_string())).collect::<Result<_, _>>()?;
+    let media = root.join("media");
+    let details = choose_game_info::get_map_details(&media, dir).ok_or("no map.info")?;
+    let mut mf = MapFiles::new(dir, &media.join("maps").join(dir), 0);
+    mf.load(details.fixed2x)?;
+    mf.post_load();
+    let mut all = vec![mf];
+    let mut sb = String::new();
+    let mut lot = IsoLot::default();
+    for cx in r[0]..=r[2] {
+        for cy in r[1]..=r[3] {
+            if !all[0].has_cell(cx, cy) {
+                continue;
+            }
+            let name = format!("{cx}_{cy}.lotheader");
+            let mut info = all[0].info_headers.remove(&name).ok_or("header missing")?;
+            let data = std::fs::read(&info.absolute_file_path).map_err(|e| e.to_string())?;
+            let mut c = IsoMetaCell::new(cx, cy);
+            iso_meta_grid::load_cell(&all, 0, &mut info, &mut c, &data, cx, cy, &mut |_| 1, &[])?;
+            let pack_path = all[0].info_file_names.get(&format!("world_{cx}_{cy}.lotpack")).ok_or("no lotpack")?;
+            let pack = std::fs::read(pack_path).map_err(|e| e.to_string())?;
+            let mut h: u64 = 0xcbf29ce484222325;
+            let mut mix = |v: i32| {
+                for b in v.to_le_bytes() {
+                    h ^= b as u64;
+                    h = h.wrapping_mul(0x100000001b3);
+                }
+            };
+            let n = ((info.max_level.min(31) - info.min_level.max(-32) + 1) * 64) as usize;
+            let base = ((info.min_level.max(-32) - info.min_level) * 64) as usize;
+            for lx in 0..32 {
+                for ly in 0..32 {
+                    if let Some(e) = lot.load(&info, &pack, cx, cy, cx * 32 + lx, cy * 32 + ly) {
+                        eprintln!("ERROR {cx},{cy} chunk {lx},{ly}: {e}");
+                    }
+                    mix(lot.min_level);
+                    mix(lot.max_level);
+                    mix(lot.data.len() as i32);
+                    for v in &lot.offset_in_data[base..base + n] {
+                        mix(*v);
+                    }
+                    for v in &lot.data {
+                        mix(*v);
+                    }
+                    if lx == 16 && ly == 16 {
+                        let _ = write!(sb, "D {cx} {cy} {} {}", lot.min_level, lot.max_level);
+                        for v in &lot.offset_in_data[base..base + n] {
+                            let _ = write!(sb, " {v}");
+                        }
+                        sb.push_str(" |");
+                        for v in &lot.data {
+                            let _ = write!(sb, " {v}");
+                        }
+                        sb.push('\n');
+                    }
+                }
+            }
+            let _ = writeln!(sb, "L {cx} {cy} {h:x}");
+            all[0].info_headers.insert(name, info);
         }
     }
     Ok(sb)

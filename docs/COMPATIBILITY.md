@@ -1,3 +1,6 @@
+## Chunk tile data by direct port (2026-11-12)
+`LotPackProbe` calls the original `IsoLot.get` for every chunk of a cell range; `pz-dump lotpack` does the same through the port. `sh tools/oracle.sh lotpack-all` → `OK   lotpack: 8130 lines identical` for all 4,065 cells (4,162,560 chunks); the 25-cell Rosewood range runs in `tools/engine_check.sh`. This is the data `IsoCell.PlaceLot` consumes; object creation from it is the next slice.
+
 ## Cell headers by direct port (2026-11-12)
 `LotHeadersProbe "Muldraugh, KY"` drives the original `IsoMetaGrid.MetaGridLoaderThread.loadCell` over all 4,065 `.lotheader` files (single thread, empty zombie-voronoi list) and prints headers, rooms and buildings; `pz-dump lotheaders .. "Muldraugh, KY"` prints the same from `zomboid-engine`. `sh tools/oracle.sh lotheaders` → `OK   lotheaders: 1037796 lines identical` (45.7 MB). Limits are listed under E2 in `docs/PORT.md`. `zomboid-content::lot` (the older reader the client uses) is not replaced yet.
 
