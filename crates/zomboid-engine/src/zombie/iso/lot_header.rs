@@ -18,6 +18,8 @@ pub struct LotHeader {
     zombie_intensity: Vec<u8>,
     pub file_name: String,
     pub absolute_file_path: std::path::PathBuf,
+    /// zombie.iso.LotHeader.adjacentCells, indexed by `IsoDirections` ordinal.
+    pub adjacent_cells: [bool; 8],
 }
 
 impl LotHeader {
@@ -35,6 +37,7 @@ impl LotHeader {
             zombie_intensity: vec![0; 1024],
             file_name: String::new(),
             absolute_file_path: Default::default(),
+            adjacent_cells: [false; 8],
         }
     }
     /// zombie.iso.LotHeader.getNumLevels

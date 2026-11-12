@@ -53,4 +53,5 @@ sel lotheaders && run_case lotheaders LotHeadersProbe "Muldraugh, KY"
 sel lotpack && run_case lotpack LotPackProbe "Muldraugh, KY" 30 43 34 47
 # the whole map (4.2 GB of lotpacks, minutes): sh tools/oracle.sh lotpack-all
 [ "$want" = lotpack-all ] && run_case lotpack LotPackProbe "Muldraugh, KY" 0 0 99 99
+sel metagrid && server_case metagrid MetaGridProbe "Muldraugh, KY" 30 43 34 47
 exit $fail

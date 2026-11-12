@@ -4,12 +4,12 @@ Source: decompiled `projectzomboid.jar` sha256 `e1a69eb743ede60b213a0fe7f8b83d4f
 A method counts as cited when a Rust doc comment names it. Citing is a pointer for reviewers, not proof of parity: evidence lives in docs/COMPATIBILITY.md.
 Method counts are distinct method names per top-level file (overloads and inner classes merged).
 
-**Total: 36 of 3424 classes touched, 168 of 46121 method names cited (0.4%), 962280 decompiled lines.**
+**Total: 37 of 3424 classes touched, 193 of 46121 method names cited (0.4%), 962280 decompiled lines.**
 
 | Package | Classes | Touched | Method names | Cited | Lines |
 |---|---:|---:|---:|---:|---:|
 | generation | 145 | 0 | 2113 | 0 (0.0%) | 193849 |
-| zombie.iso | 346 | 22 | 7277 | 106 (1.5%) | 144530 |
+| zombie.iso | 346 | 23 | 7277 | 130 (1.8%) | 144530 |
 | zombie.core | 450 | 10 | 5920 | 49 (0.8%) | 93574 |
 | zombie.characters | 200 | 0 | 5028 | 0 (0.0%) | 77144 |
 | zombie.network | 436 | 0 | 3229 | 0 (0.0%) | 60679 |
@@ -17,7 +17,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.entity | 156 | 0 | 2517 | 0 (0.0%) | 36294 |
 | zombie.inventory | 40 | 0 | 2100 | 0 (0.0%) | 28391 |
 | zombie.vehicles | 42 | 0 | 1411 | 0 (0.0%) | 28275 |
-| zombie | 60 | 2 | 1192 | 9 (0.8%) | 22185 |
+| zombie | 60 | 2 | 1192 | 10 (0.8%) | 22185 |
 | zombie.randomizedWorld | 149 | 0 | 783 | 0 (0.0%) | 19518 |
 | zombie.pathfind | 90 | 0 | 823 | 0 (0.0%) | 18680 |
 | zombie.worldMap | 85 | 0 | 1328 | 0 (0.0%) | 18604 |
@@ -75,7 +75,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | Class | Cited / method names | Rust |
 |---|---:|---|
 | zombie.GameTime | 7 / 136 | crates/zomboid-client/src/sim.rs, crates/zomboid-content/src/save.rs |
-| zombie.SandboxOptions | 2 / 101 | crates/zomboid-content/src/sandbox.rs |
+| zombie.SandboxOptions | 3 / 101 | crates/zomboid-content/src/sandbox.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.core.TilePropertyAliasMap | 5 / 6 | crates/zomboid-engine/src/zombie/core/tile_property_alias_map.rs |
 | zombie.core.Translator | 1 / 41 | crates/zomboid-lua/src/text.rs |
 | zombie.core.math.PZMath | 13 / 68 | crates/zomboid-engine/src/zombie/core/math/pz_math.rs |
@@ -94,14 +94,15 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.iso.IsoCell | 1 / 229 | crates/zomboid-client/src/scene.rs |
 | zombie.iso.IsoDirections | 16 / 19 | crates/zomboid-engine/src/zombie/iso/iso_directions.rs |
 | zombie.iso.IsoGridSquare | 1 / 581 | crates/zomboid-client/src/scene.rs, crates/zomboid-client/src/sim.rs |
-| zombie.iso.IsoLot | 3 / 9 | crates/zomboid-engine/src/zombie/iso/iso_lot.rs |
-| zombie.iso.IsoMetaCell | 2 / 28 | crates/zomboid-engine/src/zombie/iso/iso_meta_cell.rs |
-| zombie.iso.IsoMetaGrid | 2 / 98 | crates/zomboid-content/src/fishing_zones.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
+| zombie.iso.IsoLot | 4 / 9 | crates/zomboid-engine/src/zombie/iso/iso_lot.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
+| zombie.iso.IsoMetaCell | 5 / 28 | crates/zomboid-engine/src/zombie/iso/iso_meta_cell.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
+| zombie.iso.IsoMetaChunk | 7 / 27 | crates/zomboid-engine/src/zombie/iso/iso_meta_chunk.rs |
+| zombie.iso.IsoMetaGrid | 13 / 98 | crates/zomboid-content/src/fishing_zones.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoWorld | 10 / 131 | crates/zomboid-engine/src/zombie/iso/iso_world.rs |
-| zombie.iso.LotHeader | 3 / 10 | crates/zomboid-engine/src/zombie/iso/lot_header.rs |
+| zombie.iso.LotHeader | 4 / 10 | crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs, crates/zomboid-engine/src/zombie/iso/lot_header.rs |
 | zombie.iso.MapFiles | 9 / 14 | crates/zomboid-engine/src/zombie/iso/map_files.rs |
 | zombie.iso.MetaObject | 0 / 7 | crates/zomboid-engine/src/zombie/iso/meta_object.rs |
-| zombie.iso.RoomDef | 6 / 51 | crates/zomboid-engine/src/zombie/iso/room_def.rs |
+| zombie.iso.RoomDef | 7 / 51 | crates/zomboid-engine/src/zombie/iso/room_def.rs |
 | zombie.iso.RoomID | 5 / 5 | crates/zomboid-engine/src/zombie/iso/room_id.rs |
 | zombie.iso.SpriteDetails.IsoFlagType | 3 / 4 | crates/zomboid-engine/src/zombie/iso/sprite_details/iso_flag_type.rs |
 | zombie.iso.SpriteDetails.IsoObjectType | 3 / 4 | crates/zomboid-engine/src/zombie/iso/sprite_details/iso_object_type.rs |

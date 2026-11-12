@@ -55,3 +55,8 @@ fn lotheaders_match_original() {
 fn lotpack_matches_original() {
     check("lotpack", &["Muldraugh, KY", "30", "43", "34", "47"]);
 }
+
+#[test]
+fn metagrid_matches_original() {
+    check("metagrid", &["Muldraugh, KY", "30", "43", "34", "47"]);
+}

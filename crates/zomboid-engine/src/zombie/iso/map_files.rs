@@ -90,7 +90,8 @@ impl MapFiles {
     }
 
     /// zombie.iso.MapFiles.load: indexes the folder. `fixed2x` is `ChooseGameInfo.getMapDetails(name).isFixed2x()`.
-    /// The directory is listed in sorted order here (Java's `File.list` order is unspecified).
+    /// Names are taken in the order the OS lists them, as `File.list` does; that order decides ties in the
+    /// HashMap-ordered walks of the original (`consolidateBuildings`).
     pub fn load(&mut self, fixed2x: bool) -> Result<bool, String> {
         if !self.map_directory_absolute_path.is_dir() {
             return Ok(false);
@@ -104,7 +105,6 @@ impl MapFiles {
                     .into_owned(),
             );
         }
-        names.sort_unstable();
         for file_name in names {
             if file_name.ends_with(".lotheader") {
                 let info = self.create_lot_header(fixed2x, &file_name)?;

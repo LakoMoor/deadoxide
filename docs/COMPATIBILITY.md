@@ -1,3 +1,6 @@
+## Meta grid by direct port (2026-11-12)
+`MetaGridProbe` runs inside the booted original (`ServerHarness`), builds a fresh grid with the original `IsoMetaGrid.Create()` and prints the building list hash, adjacent-cell flags, per-chunk room ids and a per-cell hash of room lookups; `pz-dump metagrid .. "Muldraugh, KY" 30 43 34 47` does the same through the port. `sh tools/oracle.sh metagrid` → `OK   metagrid: 1548 lines identical`. The building list order (Java `HashMap` iteration over 4,065 header names) is reproduced. The live world's grid additionally contains basements, which are not ported: room ids of houses with basements therefore still differ from a real save.
+
 ## Chunk tile data by direct port (2026-11-12)
 `LotPackProbe` calls the original `IsoLot.get` for every chunk of a cell range; `pz-dump lotpack` does the same through the port. `sh tools/oracle.sh lotpack-all` → `OK   lotpack: 8130 lines identical` for all 4,065 cells (4,162,560 chunks); the 25-cell Rosewood range runs in `tools/engine_check.sh`. This is the data `IsoCell.PlaceLot` consumes; object creation from it is the next slice.
 

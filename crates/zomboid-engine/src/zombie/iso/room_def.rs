@@ -1,3 +1,4 @@
+use super::iso_meta_grid::BuildingRef;
 use super::meta_object::MetaObject;
 use crate::java;
 
@@ -20,7 +21,7 @@ impl RoomRect {
     }
 }
 
-/// zombie.iso.RoomDef: a room as the map files define it. `building` holds the BuildingDef id instead of a reference.
+/// zombie.iso.RoomDef: a room as the map files define it. `building` is a handle into `IsoMetaGrid::building_defs`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RoomDef {
     pub explored: bool,
@@ -30,7 +31,7 @@ pub struct RoomDef {
     pub lights_active: bool,
     pub name: String,
     pub level: i32,
-    pub building: Option<i64>,
+    pub building: Option<BuildingRef>,
     pub id: i64,
     pub rects: Vec<RoomRect>,
     pub objects: Vec<MetaObject>,
@@ -116,6 +117,21 @@ impl RoomDef {
         self.rects
             .iter()
             .find(|r| r.x <= x && r.y <= y && r.get_x2() >= x && r.get_y2() >= y)
+    }
+
+    /// zombie.iso.RoomDef.RoomRect.contains through zombie.iso.RoomDef.contains: the ints are compared as floats there.
+    pub fn contains(&self, x: i32, y: i32) -> bool {
+        let (x, y) = (x as f32, y as f32);
+        self.rects.iter().any(|r| {
+            x >= r.x as f32 && y >= r.y as f32 && x < r.get_x2() as f32 && y < r.get_y2() as f32
+        })
+    }
+
+    /// zombie.iso.RoomDef.intersects
+    pub fn intersects(&self, x: i32, y: i32, w: i32, h: i32) -> bool {
+        self.rects
+            .iter()
+            .any(|r| x + w > r.x && x < r.get_x2() && y + h > r.y && y < r.get_y2())
     }
 
     /// zombie.iso.RoomDef.getArea

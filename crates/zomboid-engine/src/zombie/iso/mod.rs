@@ -3,6 +3,7 @@ pub mod building_id;
 pub mod iso_directions;
 pub mod iso_lot;
 pub mod iso_meta_cell;
+pub mod iso_meta_chunk;
 pub mod iso_meta_grid;
 pub mod iso_world;
 pub mod lot_header;

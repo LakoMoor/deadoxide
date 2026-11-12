@@ -1,12 +1,13 @@
+use super::iso_meta_grid::RoomRef;
 use super::room_def::RoomDef;
 use crate::zombie::core::math::pz_math;
 
-/// zombie.iso.BuildingDef: the map-file side of a building. `rooms` and `emptyoutside` are indices into the owning
-/// `IsoMetaCell::room_list` (the original holds RoomDef references).
+/// zombie.iso.BuildingDef: the map-file side of a building. `rooms` and `emptyoutside` are handles into
+/// `IsoMetaGrid::room_defs` (the original holds RoomDef references).
 #[derive(Clone, Debug, PartialEq)]
 pub struct BuildingDef {
-    pub emptyoutside: Vec<usize>,
-    pub rooms: Vec<usize>,
+    pub emptyoutside: Vec<RoomRef>,
+    pub rooms: Vec<RoomRef>,
     /// Pairs (chunk x, chunk y) as shorts, in insertion order.
     pub overlapped_chunks: Vec<i16>,
     pub alarmed: bool,
@@ -46,7 +47,7 @@ impl BuildingDef {
         self.x2 = i32::MIN;
         self.y2 = i32::MIN;
         for &r in self.rooms.iter().chain(&self.emptyoutside) {
-            for rect in &room_list[r].rects {
+            for rect in &room_list[r.0 as usize].rects {
                 if rect.x < self.x {
                     self.x = rect.x;
                 }
@@ -62,14 +63,14 @@ impl BuildingDef {
             }
         }
         self.overlapped_chunks.clear();
-        let all: Vec<usize> = self
+        let all: Vec<RoomRef> = self
             .rooms
             .iter()
             .chain(&self.emptyoutside)
             .copied()
             .collect();
         for r in all {
-            for rect in &room_list[r].rects {
+            for rect in &room_list[r.0 as usize].rects {
                 let min_x = rect.x.wrapping_sub(1) / 8;
                 let min_y = rect.y.wrapping_sub(1) / 8;
                 let max_x = rect.x.wrapping_add(rect.w) / 8;
@@ -95,7 +96,7 @@ impl BuildingDef {
             &self.rooms
         };
         for &r in room_defs {
-            let room_def = &room_list[r];
+            let room_def = &room_list[r.0 as usize];
             if room_def.level <= min_z {
                 if room_def.level < min_z {
                     min_x = i32::MAX;

@@ -135,3 +135,30 @@ impl JavaRandom for Random {
         Random::next_float(self)
     }
 }
+
+/// java.lang.String.hashCode over UTF-16 code units.
+pub fn string_hash_code(s: &str) -> i32 {
+    s.encode_utf16()
+        .fold(0i32, |h, c| h.wrapping_mul(31).wrapping_add(c as i32))
+}
+
+/// Iteration order of a `java.util.HashMap<String, _>` filled by `put` in the given order (no removals): indices into
+/// `keys_in_insertion_order`, duplicates keeping their first position. Buckets ascend, entries of one bucket keep
+/// insertion order. Bins that Java would turn into trees (8+ entries with 64+ buckets) may iterate differently there.
+pub fn hash_map_order(keys_in_insertion_order: &[&str]) -> Vec<usize> {
+    let mut seen = std::collections::HashSet::new();
+    let unique: Vec<usize> = (0..keys_in_insertion_order.len())
+        .filter(|i| seen.insert(keys_in_insertion_order[*i]))
+        .collect();
+    let mut cap: usize = 16;
+    while unique.len() as f64 > cap as f64 * 0.75 {
+        cap *= 2;
+    }
+    let bucket = |i: usize| {
+        let h = string_hash_code(keys_in_insertion_order[i]);
+        ((h ^ ((h as u32) >> 16) as i32) as u32 as usize) & (cap - 1)
+    };
+    let mut order = unique;
+    order.sort_by_key(|i| bucket(*i)); // stable: insertion order within a bucket
+    order
+}

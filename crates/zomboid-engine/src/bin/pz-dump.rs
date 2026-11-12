@@ -7,14 +7,11 @@ use std::io::Write as _;
 use std::path::Path;
 
 use zomboid_engine::zombie::core::tile_property_alias_map::TilePropertyAliasMap;
-use zomboid_engine::zombie::game_states::choose_game_info;
 use zomboid_engine::zombie::iso::iso_lot::IsoLot;
-use zomboid_engine::zombie::iso::iso_meta_cell::IsoMetaCell;
-use zomboid_engine::zombie::iso::iso_meta_grid;
+use zomboid_engine::zombie::iso::iso_meta_grid::{AlarmSettings, IsoMetaGrid};
 use zomboid_engine::zombie::iso::iso_world::{
     self, TileDefinitions, VANILLA_TILE_DEFINITION_FILES,
 };
-use zomboid_engine::zombie::iso::map_files::MapFiles;
 use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::IsoSpriteManager;
 
 fn main() {
@@ -23,6 +20,7 @@ fn main() {
         Some("tiledefs") if a.len() == 3 => tiledefs(Path::new(&a[2])),
         Some("lotheaders") if a.len() == 4 => lotheaders(Path::new(&a[2]), &a[3]),
         Some("lotpack") if a.len() == 8 => lotpack(Path::new(&a[2]), &a[3], &a[4..8]),
+        Some("metagrid") if a.len() == 8 => metagrid(Path::new(&a[2]), &a[3], &a[4..8]),
         _ => Err("usage: see the header of pz-dump.rs".into()),
     };
     match r {
@@ -156,56 +154,77 @@ pub fn tiledefs(root: &Path) -> Result<String, String> {
     Ok(sb)
 }
 
+const NO_WORLD_GEN: (i32, i32, i32, i32) = (10000000, 10000000, -10000000, -10000000);
+
+fn mix(h: &mut u64, v: i32) {
+    for b in v.to_le_bytes() {
+        *h ^= b as u64;
+        *h = h.wrapping_mul(0x100000001b3);
+    }
+}
+fn mix_long(h: &mut u64, v: i64) {
+    mix(h, v as i32);
+    mix(h, (v >> 32) as i32);
+}
+
 /// Every lotheader of one map folder through the port of MetaGridLoaderThread.loadCell, cells in x-then-y order.
 /// `lightsActive` is random in the original and not printed.
 pub fn lotheaders(root: &Path, dir: &str) -> Result<String, String> {
     let media = root.join("media");
-    let details = choose_game_info::get_map_details(&media, dir).ok_or("no map.info")?;
-    let mut mf = MapFiles::new(dir, &media.join("maps").join(dir), 0);
-    if !mf.load(details.fixed2x)? {
-        return Err("MapFiles.load false".into());
-    }
-    mf.post_load();
+    let mut g = IsoMetaGrid::default();
+    g.create_step1(&media, &[dir.to_string()], NO_WORLD_GEN)?;
     let mut sb = String::new();
-    let _ = writeln!(
-        sb,
-        "M {} {} {} {} {} {} {} {}",
-        mf.min_x,
-        mf.min_y,
-        mf.max_x,
-        mf.max_y,
-        mf.min_cell300_x,
-        mf.min_cell300_y,
-        mf.max_cell300_x,
-        mf.max_cell300_y
+    {
+        let mf = &g.map_files[0];
+        let _ = writeln!(
+            sb,
+            "M {} {} {} {} {} {} {} {}",
+            mf.min_x,
+            mf.min_y,
+            mf.max_x,
+            mf.max_y,
+            mf.min_cell300_x,
+            mf.min_cell300_y,
+            mf.max_cell300_x,
+            mf.max_cell300_y
+        );
+        for y in mf.min_y..=mf.max_y {
+            for x in mf.min_x..=mf.max_x {
+                sb.push(if mf.has_cell(x, y) { '1' } else { '0' });
+            }
+            sb.push('\n');
+        }
+        for y in mf.min_cell300_y..=mf.max_cell300_y {
+            for x in mf.min_cell300_x..=mf.max_cell300_x {
+                sb.push(if mf.has_cell300(x, y) { '1' } else { '0' });
+            }
+            sb.push('\n');
+        }
+    }
+    let (x1, y1, x2, y2) = (
+        g.map_files[0].min_x,
+        g.map_files[0].min_y,
+        g.map_files[0].max_x,
+        g.map_files[0].max_y,
     );
-    for y in mf.min_y..=mf.max_y {
-        for x in mf.min_x..=mf.max_x {
-            sb.push(if mf.has_cell(x, y) { '1' } else { '0' });
-        }
-        sb.push('\n');
-    }
-    for y in mf.min_cell300_y..=mf.max_cell300_y {
-        for x in mf.min_cell300_x..=mf.max_cell300_x {
-            sb.push(if mf.has_cell300(x, y) { '1' } else { '0' });
-        }
-        sb.push('\n');
-    }
-    let mut all = vec![mf];
-    for x in all[0].min_x..=all[0].max_x {
-        for y in all[0].min_y..=all[0].max_y {
-            if !all[0].has_cell(x, y) {
+    for x in x1..=x2 {
+        for y in y1..=y2 {
+            if !g.map_files[0].has_cell(x, y) {
                 continue;
             }
-            let name = format!("{x}_{y}.lotheader");
-            let mut h = all[0].info_headers.remove(&name).ok_or("header missing")?;
-            let data = std::fs::read(&h.absolute_file_path).map_err(|e| e.to_string())?;
-            let mut c = IsoMetaCell::new(x, y);
-            if let Err(e) =
-                iso_meta_grid::load_cell(&all, 0, &mut h, &mut c, &data, x, y, &mut |_| 1, &[])
-            {
-                eprintln!("ERROR loading {name}: {e}");
+            let path = g.map_files[0]
+                .get_lot_header(x, y)
+                .ok_or("header missing")?
+                .absolute_file_path
+                .clone();
+            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            if let Err(e) = g.load_cell(0, &data, x, y, &mut |_| 1, &[]) {
+                eprintln!("ERROR loading {}: {e}", path.display());
             }
+            let h = g.map_files[0]
+                .get_lot_header(x, y)
+                .ok_or("header missing")?;
+            let c = g.get_cell_data(x, y).ok_or("cell missing")?;
             let _ = writeln!(
                 sb,
                 "C {x} {y} {} {} {} {} {} {} {} {} {}",
@@ -223,6 +242,7 @@ pub fn lotheaders(root: &Path, dir: &str) -> Result<String, String> {
                 let _ = writeln!(sb, "T {t}");
             }
             for r in &c.room_list {
+                let r = g.room(*r);
                 let _ = write!(
                     sb,
                     "R {} {} {} {} {} {} {} {} {} [{}]",
@@ -234,7 +254,7 @@ pub fn lotheaders(root: &Path, dir: &str) -> Result<String, String> {
                     r.x2,
                     r.y2,
                     r.area,
-                    r.building.unwrap_or(-1),
+                    r.building.map_or(-1, |b| g.building(b).id),
                     r.name
                 );
                 for q in &r.rects {
@@ -247,17 +267,18 @@ pub fn lotheaders(root: &Path, dir: &str) -> Result<String, String> {
                 sb.push('\n');
             }
             for b in &c.buildings {
+                let b = g.building(*b);
                 let _ = write!(
                     sb,
                     "B {} {} {} {} {} {} r",
                     b.id, b.meta_id, b.x, b.y, b.x2, b.y2
                 );
                 for r in &b.rooms {
-                    let _ = write!(sb, " {}", c.room_list[*r].id);
+                    let _ = write!(sb, " {}", g.room(*r).id);
                 }
                 sb.push_str(" e");
                 for r in &b.emptyoutside {
-                    let _ = write!(sb, " {}", c.room_list[*r].id);
+                    let _ = write!(sb, " {}", g.room(*r).id);
                 }
                 sb.push_str(" c");
                 for v in &b.overlapped_chunks {
@@ -270,7 +291,6 @@ pub fn lotheaders(root: &Path, dir: &str) -> Result<String, String> {
                 let _ = write!(sb, "{:02x}", h.get_zombie_intensity(i));
             }
             sb.push('\n');
-            all[0].info_headers.insert(name, h);
         }
     }
     Ok(sb)
@@ -283,50 +303,46 @@ pub fn lotpack(root: &Path, dir: &str, range: &[String]) -> Result<String, Strin
         .map(|s| s.parse::<i32>().map_err(|e| e.to_string()))
         .collect::<Result<_, _>>()?;
     let media = root.join("media");
-    let details = choose_game_info::get_map_details(&media, dir).ok_or("no map.info")?;
-    let mut mf = MapFiles::new(dir, &media.join("maps").join(dir), 0);
-    mf.load(details.fixed2x)?;
-    mf.post_load();
-    let mut all = vec![mf];
+    let mut g = IsoMetaGrid::default();
+    g.create_step1(&media, &[dir.to_string()], NO_WORLD_GEN)?;
     let mut sb = String::new();
     let mut lot = IsoLot::default();
     for cx in r[0]..=r[2] {
         for cy in r[1]..=r[3] {
-            if !all[0].has_cell(cx, cy) {
+            if !g.map_files[0].has_cell(cx, cy) {
                 continue;
             }
-            let name = format!("{cx}_{cy}.lotheader");
-            let mut info = all[0].info_headers.remove(&name).ok_or("header missing")?;
-            let data = std::fs::read(&info.absolute_file_path).map_err(|e| e.to_string())?;
-            let mut c = IsoMetaCell::new(cx, cy);
-            iso_meta_grid::load_cell(&all, 0, &mut info, &mut c, &data, cx, cy, &mut |_| 1, &[])?;
-            let pack_path = all[0]
+            let path = g.map_files[0]
+                .get_lot_header(cx, cy)
+                .ok_or("header missing")?
+                .absolute_file_path
+                .clone();
+            let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+            g.load_cell(0, &data, cx, cy, &mut |_| 1, &[])?;
+            let info = g.map_files[0]
+                .get_lot_header(cx, cy)
+                .ok_or("header missing")?;
+            let pack_path = g.map_files[0]
                 .info_file_names
                 .get(&format!("world_{cx}_{cy}.lotpack"))
                 .ok_or("no lotpack")?;
             let pack = std::fs::read(pack_path).map_err(|e| e.to_string())?;
             let mut h: u64 = 0xcbf29ce484222325;
-            let mut mix = |v: i32| {
-                for b in v.to_le_bytes() {
-                    h ^= b as u64;
-                    h = h.wrapping_mul(0x100000001b3);
-                }
-            };
             let n = ((info.max_level.min(31) - info.min_level.max(-32) + 1) * 64) as usize;
             let base = ((info.min_level.max(-32) - info.min_level) * 64) as usize;
             for lx in 0..32 {
                 for ly in 0..32 {
-                    if let Some(e) = lot.load(&info, &pack, cx, cy, cx * 32 + lx, cy * 32 + ly) {
+                    if let Some(e) = lot.load(info, &pack, cx, cy, cx * 32 + lx, cy * 32 + ly) {
                         eprintln!("ERROR {cx},{cy} chunk {lx},{ly}: {e}");
                     }
-                    mix(lot.min_level);
-                    mix(lot.max_level);
-                    mix(lot.data.len() as i32);
+                    mix(&mut h, lot.min_level);
+                    mix(&mut h, lot.max_level);
+                    mix(&mut h, lot.data.len() as i32);
                     for v in &lot.offset_in_data[base..base + n] {
-                        mix(*v);
+                        mix(&mut h, *v);
                     }
                     for v in &lot.data {
-                        mix(*v);
+                        mix(&mut h, *v);
                     }
                     if lx == 16 && ly == 16 {
                         let _ = write!(sb, "D {cx} {cy} {} {}", lot.min_level, lot.max_level);
@@ -342,7 +358,89 @@ pub fn lotpack(root: &Path, dir: &str, range: &[String]) -> Result<String, Strin
                 }
             }
             let _ = writeln!(sb, "L {cx} {cy} {h:x}");
-            all[0].info_headers.insert(name, info);
+        }
+    }
+    Ok(sb)
+}
+
+/// The whole meta grid as IsoMetaGrid.Create builds it for `Core.gameMap`, then rooms per chunk and room lookups per
+/// square for a cell range; pairs with MetaGridProbe.java (run inside the booted original).
+pub fn metagrid(root: &Path, game_map: &str, range: &[String]) -> Result<String, String> {
+    let r: Vec<i32> = range
+        .iter()
+        .map(|s| s.parse::<i32>().map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
+    let media = root.join("media");
+    let mut g = IsoMetaGrid::default();
+    let dirs = IsoMetaGrid::lot_directories(&media, game_map);
+    g.create_step1(&media, &dirs, (-250, -250, 250, 250))?;
+    for e in g.load_all_cells(&mut |_| 1, &mut |_, _| Vec::new()) {
+        eprintln!("{e}");
+    }
+    let alarm = AlarmSettings {
+        last_stand: false,
+        power_grid_exists: true,
+        alarm: 1,
+        alarm_decay: 1,
+    };
+    g.create_step2(&alarm, &mut |_| 1, &mut |a, _| a);
+    let mut sb = String::new();
+    let _ = writeln!(
+        sb,
+        "G {} {} {} {} dirs={}",
+        g.min_x,
+        g.min_y,
+        g.max_x,
+        g.max_y,
+        dirs.join(";")
+    );
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in &g.buildings {
+        mix_long(&mut h, g.building(*b).id);
+    }
+    let _ = writeln!(sb, "B {} {h:x}", g.buildings.len());
+    for cx in r[0]..=r[2] {
+        for cy in r[1]..=r[3] {
+            let Some(info) = g.get_header(cx, cy) else {
+                continue;
+            };
+            let adj: String = info
+                .adjacent_cells
+                .iter()
+                .map(|b| if *b { '1' } else { '0' })
+                .collect();
+            let _ = writeln!(sb, "A {cx} {cy} {adj}");
+            let cell = g.get_cell_data(cx, cy).ok_or("cell missing")?;
+            for ly in 0..32 {
+                for lx in 0..32 {
+                    if let Some(ch) = cell.chunk((ly * 32 + lx) as usize) {
+                        if ch.get_rooms_size() > 0 {
+                            let _ = write!(sb, "K {cx} {cy} {lx} {ly}");
+                            for rr in ch.rooms() {
+                                let _ = write!(sb, " {}", g.room(*rr).id);
+                            }
+                            sb.push('\n');
+                        }
+                    }
+                }
+            }
+            let mut h: u64 = 0xcbf29ce484222325;
+            for z in info.min_level..=info.max_level {
+                for y in cy * 256..cy * 256 + 256 {
+                    for x in cx * 256..cx * 256 + 256 {
+                        mix_long(
+                            &mut h,
+                            g.get_room_at(x, y, z).map_or(-1, |rr| g.room(rr).id),
+                        );
+                        mix_long(
+                            &mut h,
+                            g.get_empty_outside_at(x, y, z)
+                                .map_or(-1, |rr| g.room(rr).id),
+                        );
+                    }
+                }
+            }
+            let _ = writeln!(sb, "H {cx} {cy} {h:x}");
         }
     }
     Ok(sb)
