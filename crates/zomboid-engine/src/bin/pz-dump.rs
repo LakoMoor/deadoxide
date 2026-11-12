@@ -278,7 +278,10 @@ pub fn lotheaders(root: &Path, dir: &str) -> Result<String, String> {
 
 /// Every chunk of a cell range through the port of IsoLot.load; pairs with LotPackProbe.java.
 pub fn lotpack(root: &Path, dir: &str, range: &[String]) -> Result<String, String> {
-    let r: Vec<i32> = range.iter().map(|s| s.parse::<i32>().map_err(|e| e.to_string())).collect::<Result<_, _>>()?;
+    let r: Vec<i32> = range
+        .iter()
+        .map(|s| s.parse::<i32>().map_err(|e| e.to_string()))
+        .collect::<Result<_, _>>()?;
     let media = root.join("media");
     let details = choose_game_info::get_map_details(&media, dir).ok_or("no map.info")?;
     let mut mf = MapFiles::new(dir, &media.join("maps").join(dir), 0);
@@ -297,7 +300,10 @@ pub fn lotpack(root: &Path, dir: &str, range: &[String]) -> Result<String, Strin
             let data = std::fs::read(&info.absolute_file_path).map_err(|e| e.to_string())?;
             let mut c = IsoMetaCell::new(cx, cy);
             iso_meta_grid::load_cell(&all, 0, &mut info, &mut c, &data, cx, cy, &mut |_| 1, &[])?;
-            let pack_path = all[0].info_file_names.get(&format!("world_{cx}_{cy}.lotpack")).ok_or("no lotpack")?;
+            let pack_path = all[0]
+                .info_file_names
+                .get(&format!("world_{cx}_{cy}.lotpack"))
+                .ok_or("no lotpack")?;
             let pack = std::fs::read(pack_path).map_err(|e| e.to_string())?;
             let mut h: u64 = 0xcbf29ce484222325;
             let mut mix = |v: i32| {

@@ -79,14 +79,29 @@ pub struct IsoLot {
 
 impl Default for IsoLot {
     fn default() -> Self {
-        IsoLot { max_level: 0, min_level: 0, wx: 0, wy: 0, offset_in_data: vec![0; 4096], data: Vec::new() }
+        IsoLot {
+            max_level: 0,
+            min_level: 0,
+            wx: 0,
+            wy: 0,
+            offset_in_data: vec![0; 4096],
+            data: Vec::new(),
+        }
     }
 }
 
 impl IsoLot {
     /// zombie.iso.IsoLot.load: `lotpack` is the whole `world_<cX>_<cY>.lotpack`, `info` its cell header.
     /// On any error the original logs it and leaves the chunk empty; the error text is returned for the caller to log.
-    pub fn load(&mut self, info: &super::lot_header::LotHeader, lotpack: &[u8], c_x: i32, c_y: i32, w_x: i32, w_y: i32) -> Option<String> {
+    pub fn load(
+        &mut self,
+        info: &super::lot_header::LotHeader,
+        lotpack: &[u8],
+        c_x: i32,
+        c_y: i32,
+        w_x: i32,
+        w_y: i32,
+    ) -> Option<String> {
         self.wx = w_x;
         self.wy = w_y;
         match self.load_inner(info, lotpack, c_x, c_y) {
@@ -99,7 +114,13 @@ impl IsoLot {
         }
     }
 
-    fn load_inner(&mut self, info: &super::lot_header::LotHeader, lotpack: &[u8], c_x: i32, c_y: i32) -> Result<(), String> {
+    fn load_inner(
+        &mut self,
+        info: &super::lot_header::LotHeader,
+        lotpack: &[u8],
+        c_x: i32,
+        c_y: i32,
+    ) -> Result<(), String> {
         let mut input = RandomAccess::new(lotpack);
         let version = if input.read_bytes(4) == super::lot_header::LOTPACK_MAGIC {
             let v = read_int(&mut input)?;
@@ -115,7 +136,8 @@ impl IsoLot {
         let lwy = self.wy.wrapping_sub(c_y.wrapping_mul(32));
         let index = lwx.wrapping_mul(32).wrapping_add(lwy);
         let table = (if version >= 1 { 8i64 } else { 0 }) + 4 + index as i64 * 8;
-        input.seek(usize::try_from(table).map_err(|_| "java.io.IOException: Negative seek offset")?);
+        input
+            .seek(usize::try_from(table).map_err(|_| "java.io.IOException: Negative seek offset")?);
         let pos = read_int(&mut input)?;
         input.seek(usize::try_from(pos).map_err(|_| "java.io.IOException: Negative seek offset")?);
         self.data.clear();
@@ -127,7 +149,10 @@ impl IsoLot {
             for x in 0..8 {
                 for y in 0..8 {
                     let square_xyz = x + y * 8 + (z - info.min_level) * 8 * 8;
-                    *self.offset_in_data.get_mut(square_xyz as usize).ok_or("java.lang.ArrayIndexOutOfBoundsException")? = -1;
+                    *self
+                        .offset_in_data
+                        .get_mut(square_xyz as usize)
+                        .ok_or("java.lang.ArrayIndexOutOfBoundsException")? = -1;
                     if skip > 0 {
                         skip -= 1;
                         continue;

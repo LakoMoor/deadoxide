@@ -4,12 +4,12 @@ Source: decompiled `projectzomboid.jar` sha256 `e1a69eb743ede60b213a0fe7f8b83d4f
 A method counts as cited when a Rust doc comment names it. Citing is a pointer for reviewers, not proof of parity: evidence lives in docs/COMPATIBILITY.md.
 Method counts are distinct method names per top-level file (overloads and inner classes merged).
 
-**Total: 36 of 3424 classes touched, 167 of 46121 method names cited (0.4%), 962280 decompiled lines.**
+**Total: 36 of 3424 classes touched, 168 of 46121 method names cited (0.4%), 962280 decompiled lines.**
 
 | Package | Classes | Touched | Method names | Cited | Lines |
 |---|---:|---:|---:|---:|---:|
 | generation | 145 | 0 | 2113 | 0 (0.0%) | 193849 |
-| zombie.iso | 346 | 22 | 7277 | 105 (1.4%) | 144530 |
+| zombie.iso | 346 | 22 | 7277 | 106 (1.5%) | 144530 |
 | zombie.core | 450 | 10 | 5920 | 49 (0.8%) | 93574 |
 | zombie.characters | 200 | 0 | 5028 | 0 (0.0%) | 77144 |
 | zombie.network | 436 | 0 | 3229 | 0 (0.0%) | 60679 |
@@ -94,7 +94,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.iso.IsoCell | 1 / 229 | crates/zomboid-client/src/scene.rs |
 | zombie.iso.IsoDirections | 16 / 19 | crates/zomboid-engine/src/zombie/iso/iso_directions.rs |
 | zombie.iso.IsoGridSquare | 1 / 581 | crates/zomboid-client/src/scene.rs, crates/zomboid-client/src/sim.rs |
-| zombie.iso.IsoLot | 2 / 9 | crates/zomboid-engine/src/zombie/iso/iso_lot.rs |
+| zombie.iso.IsoLot | 3 / 9 | crates/zomboid-engine/src/zombie/iso/iso_lot.rs |
 | zombie.iso.IsoMetaCell | 2 / 28 | crates/zomboid-engine/src/zombie/iso/iso_meta_cell.rs |
 | zombie.iso.IsoMetaGrid | 2 / 98 | crates/zomboid-content/src/fishing_zones.rs, crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.IsoWorld | 10 / 131 | crates/zomboid-engine/src/zombie/iso/iso_world.rs |
