@@ -34,6 +34,7 @@ fn main() {
         Some("specialcollide") if a.len() == 5 || a.len() == 6 => {
             specialcollide(Path::new(&a[2]), &a[3..], false)
         }
+        Some("stairs") if a.len() == 5 => specialcollide_mode(Path::new(&a[2]), &a[3..], 2),
         Some("los") if a.len() == 5 || a.len() == 6 => {
             specialcollide(Path::new(&a[2]), &a[3..], true)
         }
@@ -794,6 +795,12 @@ pub fn entitysprites(root: &Path) -> Result<String, String> {
 
 /// Collide matrices and door/window collision objects of one 64-square server cell; pairs with SpecialCollideProbe.java.
 pub fn specialcollide(root: &Path, cell: &[String], los: bool) -> Result<String, String> {
+    specialcollide_mode(root, cell, if los { 1 } else { 0 })
+}
+
+/// mode 0: collision objects, 1: line of sight (LosProbe.java), 2: stair heights (StairsProbe.java).
+fn specialcollide_mode(root: &Path, cell: &[String], mode: u8) -> Result<String, String> {
+    let los = mode == 1;
     let toggle = cell.len() == 3;
     let c: Vec<i32> = cell[..2]
         .iter()
@@ -890,6 +897,34 @@ pub fn specialcollide(root: &Path, cell: &[String], los: bool) -> Result<String,
         }
     }
     let grid = ChunkGrid(all.iter().map(|s| ((s.x, s.y, s.z), *s)).collect());
+    if mode == 2 {
+        let mut sb = String::from("F true\n");
+        for sq in &all {
+            if !sq.has_stairs() && sq.get_sloped_surface_direction(&world.alias).is_none() {
+                continue;
+            }
+            let (cm, _, _) = sq.calculate_matrices(&world.alias, &grid);
+            let _ = write!(
+                sb,
+                "Z {} {} {} {} {cm:x}",
+                sq.x,
+                sq.y,
+                sq.z,
+                sq.get_stairs().name()
+            );
+            for py in [0.0f32, 0.25, 0.5, 0.75, 1.0] {
+                for px in [0.0f32, 0.25, 0.5, 0.75, 1.0] {
+                    let _ = write!(
+                        sb,
+                        " {:x}",
+                        sq.get_apparent_z(&world.alias, px, py, true).to_bits()
+                    );
+                }
+            }
+            sb.push('\n');
+        }
+        return Ok(sb);
+    }
     if los {
         let mut sb = String::new();
         for sq in &all {

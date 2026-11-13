@@ -104,3 +104,8 @@ fn los_matches_original() {
 fn los_with_doors_flipped_matches_original() {
     check_as("losdoors", "los", &["129", "182", "toggle"]);
 }
+
+#[test]
+fn stairs_match_original() {
+    check("stairs", &["126", "181"]);
+}

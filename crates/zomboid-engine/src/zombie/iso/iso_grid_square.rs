@@ -1505,3 +1505,64 @@ pub fn line_clear<G: GetSquare>(
 fn pz_fastfloor(v: f32) -> i32 {
     crate::zombie::core::math::pz_math::fastfloor(v)
 }
+
+impl IsoGridSquare {
+    /// zombie.iso.IsoGridSquare.getSlopedSurfaceHeight (float, float): height (0..1) of a ramp at a point of the square.
+    pub fn get_sloped_surface_height_at(
+        &self,
+        alias: &TilePropertyAliasMap,
+        dx: f32,
+        dy: f32,
+    ) -> f32 {
+        let Some(dir) = self.get_sloped_surface_direction(alias) else {
+            return 0.0;
+        };
+        let (dx, dy) = (dx.clamp(0.0, 1.0), dy.clamp(0.0, 1.0));
+        let min = self.properties.get_sloped_surface_height_min(alias) as f32;
+        let max = self.properties.get_sloped_surface_height_max(alias) as f32;
+        let lerp = |a: f32| min + (max - min) * a;
+        let z = match dir {
+            IsoDirections::N => lerp(1.0 - dy),
+            IsoDirections::S => lerp(dy),
+            IsoDirections::W => lerp(1.0 - dx),
+            IsoDirections::E => lerp(dx),
+            _ => -1.0,
+        };
+        if z < 0.0 {
+            0.0
+        } else {
+            z / 100.0
+        }
+    }
+
+    /// zombie.iso.IsoGridSquare.getApparentZ: the height a character stands at on this square at the point (dx, dy)
+    /// inside it: a staircase rises in three squares (bottom, middle, top) towards north or west. `fbo_render_chunk` is
+    /// `PerformanceSettings.fboRenderChunk`, which shifts the steps by 0.1.
+    pub fn get_apparent_z(
+        &self,
+        alias: &TilePropertyAliasMap,
+        dx: f32,
+        dy: f32,
+        fbo_render_chunk: bool,
+    ) -> f32 {
+        let (dx, dy) = (dx.clamp(0.0, 1.0), dy.clamp(0.0, 1.0));
+        let fudge: f32 = if fbo_render_chunk { 0.1 } else { 0.0 };
+        let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
+        let z = self.z as f32;
+        if self.has_type(T::stairsTN) {
+            z + lerp(0.6666 + fudge, 1.0, 1.0 - dy)
+        } else if self.has_type(T::stairsTW) {
+            z + lerp(0.6666 + fudge, 1.0, 1.0 - dx)
+        } else if self.has_type(T::stairsMN) {
+            z + lerp(0.3333 + fudge, 0.6666 + fudge, 1.0 - dy)
+        } else if self.has_type(T::stairsMW) {
+            z + lerp(0.3333 + fudge, 0.6666 + fudge, 1.0 - dx)
+        } else if self.has_type(T::stairsBN) {
+            z + lerp(0.01, 0.3333 + fudge, 1.0 - dy)
+        } else if self.has_type(T::stairsBW) {
+            z + lerp(0.01, 0.3333 + fudge, 1.0 - dx)
+        } else {
+            z + self.get_sloped_surface_height_at(alias, dx, dy)
+        }
+    }
+}

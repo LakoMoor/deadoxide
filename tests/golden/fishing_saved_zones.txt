@@ -1,0 +1,2 @@
+ZONEFILE version=249 strings=155 zones=5497
+ZONEFILE fishing=0 position=299433
