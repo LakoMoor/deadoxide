@@ -8,7 +8,7 @@ import zombie.network.ServerMap;
 // them in ServerMap as a loaded ServerCell, so every cell-based lookup (IsoCell.getGridSquare) sees them. Then
 // RecalcProperties + RecalcAllWithNeighbours(true) on every square, and prints per square the collide matrix and, for
 // the 8 horizontal neighbours, the object returned by testCollideSpecialObjects (a door, window or window frame).
-// Args: <scratch dir> <server cell x> <server cell y>   (server cell = world square / 64)
+// Args: <scratch dir> <server cell x> <server cell y> [toggle]  (toggle: every door is flipped with ToggleDoorSilent first)   (server cell = world square / 64)
 public class SpecialCollideProbe {
     public static void main(String[] a) throws Exception {
         int scx = Integer.parseInt(a[1]), scy = Integer.parseInt(a[2]);
@@ -42,6 +42,7 @@ public class SpecialCollideProbe {
             Field wf = ServerMap.class.getDeclaredField("width");
             wf.setAccessible(true);
             m.cellMap[(scy - m.getMinY()) * wf.getInt(m) + (scx - m.getMinX())] = sc;
+            if (a.length > 3) for (IsoGridSquare sq : all) for (int i = 0; i < sq.getObjects().size(); i++) if (sq.getObjects().get(i) instanceof zombie.iso.objects.IsoDoor d) d.ToggleDoorSilent();
             for (IsoGridSquare sq : all) sq.RecalcProperties();
             for (IsoGridSquare sq : all) sq.RecalcAllWithNeighbours(true);
             StringBuilder sb = new StringBuilder();

@@ -27,6 +27,10 @@ public final class ServerHarness {
         File dir = new File(scratch);
         if (!dir.getName().startsWith("pz-oracle-")) throw new IllegalArgumentException("scratch dir must be named pz-oracle-*: " + scratch);
         delete(dir);
+        // Hard limit: the native network start-up has been seen to spin forever on a loaded machine.
+        Thread limit = new Thread(() -> { try { Thread.sleep(300000); } catch (InterruptedException e) { } System.err.println("ORACLE: 300 s limit"); Runtime.getRuntime().halt(6); });
+        limit.setDaemon(true);
+        limit.start();
         Thread watcher = new Thread(() -> {
             try {
                 // The world is ready once IsoWorld.init has made a cell; OnServerStarted fires on the main thread shortly after.

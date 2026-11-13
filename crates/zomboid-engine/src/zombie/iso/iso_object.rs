@@ -135,6 +135,21 @@ impl IsoObject {
             special: false,
         }
     }
+    /// zombie.iso.objects.IsoDoor.ToggleDoorSilent: flips a door between open and closed and shows the matching
+    /// sprite. No effect on other objects. Barricades are not modelled. The caller recalculates the square afterwards.
+    pub fn toggle_door_silent(&mut self) -> bool {
+        let ObjectKind::IsoDoor(d) = &mut self.kind else {
+            return false;
+        };
+        d.open = !d.open;
+        self.sprite = if d.open {
+            d.open_sprite
+        } else {
+            d.closed_sprite
+        };
+        true
+    }
+
     /// zombie.iso.IsoObject.hasProperty (IsoFlagType)
     pub fn has_property(&self, sm: &IsoSpriteManager, flag: IsoFlagType) -> bool {
         self.sprite

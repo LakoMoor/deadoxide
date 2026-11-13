@@ -31,7 +31,9 @@ fn main() {
         Some("chunkobjects") if a.len() == 7 => chunkobjects(Path::new(&a[2]), &a[3..7]),
         Some("collide") if a.len() == 7 => collide(Path::new(&a[2]), &a[3..7]),
         Some("entitysprites") if a.len() == 3 => entitysprites(Path::new(&a[2])),
-        Some("specialcollide") if a.len() == 5 => specialcollide(Path::new(&a[2]), &a[3..5]),
+        Some("specialcollide") if a.len() == 5 || a.len() == 6 => {
+            specialcollide(Path::new(&a[2]), &a[3..])
+        }
         Some("basements") if a.len() == 7 => basements(Path::new(&a[2]), &a[3..7]),
         _ => Err("usage: see the header of pz-dump.rs".into()),
     };
@@ -789,7 +791,8 @@ pub fn entitysprites(root: &Path) -> Result<String, String> {
 
 /// Collide matrices and door/window collision objects of one 64-square server cell; pairs with SpecialCollideProbe.java.
 pub fn specialcollide(root: &Path, cell: &[String]) -> Result<String, String> {
-    let c: Vec<i32> = cell
+    let toggle = cell.len() == 3;
+    let c: Vec<i32> = cell[..2]
         .iter()
         .map(|s| s.parse::<i32>().map_err(|e| e.to_string()))
         .collect::<Result<_, _>>()?;
@@ -835,6 +838,11 @@ pub fn specialcollide(root: &Path, cell: &[String]) -> Result<String, String> {
         for z in ch.get_min_level()..=ch.get_max_level() {
             for i in 0..64 {
                 if let Some(sq) = ch.get_grid_square_mut(i % 8, i / 8, z) {
+                    if toggle {
+                        for o in &mut sq.objects {
+                            o.toggle_door_silent();
+                        }
+                    }
                     sq.recalc_properties(&world.sprites);
                 }
             }

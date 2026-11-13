@@ -62,4 +62,5 @@ sel collide && server_case collide CollideProbe 1036 1460 1039 1463
 sel entitysprites && server_case entitysprites EntitySpritesProbe
 sel specialcollide && server_case specialcollide SpecialCollideProbe 129 182
 sel basements && server_case basements BasementsProbe 30 43 34 47
+sel doortoggle && { cp tests/golden/engine/specialcollide.sha256 target/oracle/sc.keep 2>/dev/null; server_case specialcollide SpecialCollideProbe 129 182 toggle; mv tests/golden/engine/specialcollide.sha256 tests/golden/engine/doortoggle.sha256 2>/dev/null; cp target/oracle/sc.keep tests/golden/engine/specialcollide.sha256 2>/dev/null; }
 exit $fail

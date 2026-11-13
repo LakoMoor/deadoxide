@@ -4,12 +4,12 @@ Source: decompiled `projectzomboid.jar` sha256 `e1a69eb743ede60b213a0fe7f8b83d4f
 A method counts as cited when a Rust doc comment names it. Citing is a pointer for reviewers, not proof of parity: evidence lives in docs/COMPATIBILITY.md.
 Method counts are distinct method names per top-level file (overloads and inner classes merged).
 
-**Total: 59 of 3424 classes touched, 277 of 46121 method names cited (0.6%), 962280 decompiled lines.**
+**Total: 59 of 3424 classes touched, 278 of 46121 method names cited (0.6%), 962280 decompiled lines.**
 
 | Package | Classes | Touched | Method names | Cited | Lines |
 |---|---:|---:|---:|---:|---:|
 | generation | 145 | 0 | 2113 | 0 (0.0%) | 193849 |
-| zombie.iso | 346 | 33 | 7277 | 188 (2.6%) | 144530 |
+| zombie.iso | 346 | 33 | 7277 | 189 (2.6%) | 144530 |
 | zombie.core | 450 | 10 | 5920 | 49 (0.8%) | 93574 |
 | zombie.characters | 200 | 0 | 5028 | 0 (0.0%) | 77144 |
 | zombie.network | 436 | 0 | 3229 | 0 (0.0%) | 60679 |
@@ -120,7 +120,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.iso.areas.IsoRoom | 0 / 45 | crates/zomboid-engine/src/zombie/iso/iso_meta_grid.rs |
 | zombie.iso.objects.IsoBarbecue | 0 / 37 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
 | zombie.iso.objects.IsoCurtain | 0 / 22 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
-| zombie.iso.objects.IsoDoor | 0 / 132 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
+| zombie.iso.objects.IsoDoor | 1 / 132 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
 | zombie.iso.objects.IsoTree | 1 / 41 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
 | zombie.iso.objects.IsoWindow | 2 / 78 | crates/zomboid-engine/src/zombie/iso/cell_loader.rs, crates/zomboid-engine/src/zombie/iso/iso_object.rs |
 | zombie.iso.sprite.IsoSprite | 6 / 100 | crates/zomboid-engine/src/zombie/iso/sprite/iso_sprite.rs |

@@ -14,13 +14,17 @@ fn game_root() -> Option<PathBuf> {
 }
 
 fn check(case: &str, args: &[&str]) {
+    check_as(case, case, args)
+}
+
+fn check_as(golden: &str, case: &str, args: &[&str]) {
     let Some(root) = game_root() else {
         eprintln!("SKIPPED {case}: no game install next to the workspace");
         return;
     };
     let want = std::fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join(format!("../../tests/golden/engine/{case}.sha256")),
+            .join(format!("../../tests/golden/engine/{golden}.sha256")),
     )
     .expect("golden hash");
     let out = Command::new(env!("CARGO_BIN_EXE_pz-dump"))
@@ -84,4 +88,9 @@ fn specialcollide_matches_original() {
 #[test]
 fn basements_match_original() {
     check("basements", &["30", "43", "34", "47"]);
+}
+
+#[test]
+fn doortoggle_matches_original() {
+    check_as("doortoggle", "specialcollide", &["129", "182", "toggle"]);
 }
