@@ -5,7 +5,7 @@ import { Renderer } from "./render.js";
 const $ = (id) => document.getElementById(id);
 const status = (t) => ($("status").textContent = t);
 const keys = new Set();
-let scene = null, renderer = null, zoom = 1, levelTop = 1, last = 0;
+let scene = null, renderer = null, zoom = 1, levelTop = 1, last = 0, lastFloor = -99;
 
 async function mountFiles(entries, cx, cy) {
   // entries: [{ path, read: () => Promise<ArrayBuffer>, size }]
@@ -68,7 +68,10 @@ function frame(now) {
   renderer.setMarker(scene.player_marker());
   const ranges = scene.level_ranges();
   renderer.draw(scene.player_px(), zoom, ranges[Math.max(1, Math.min(levelTop, ranges.length - 1))]);
-  $("pos").textContent = `x ${scene.player_x().toFixed(1)}  y ${scene.player_y().toFixed(1)}  floors up to ${levelTop + scene.min_level() - 1}`;
+  // follow the player between floors: show up to the floor above the one they stand on
+  const want = scene.player_z() - scene.min_level() + 1;
+  if (want !== lastFloor) { lastFloor = want; levelTop = want; }
+  $("pos").textContent = `x ${scene.player_x().toFixed(1)}  y ${scene.player_y().toFixed(1)}  height ${scene.player_height().toFixed(2)}  floors up to ${levelTop + scene.min_level() - 1}`;
   requestAnimationFrame(frame);
 }
 

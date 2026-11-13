@@ -5,8 +5,7 @@ use std::path::Path;
 
 use wasm_bindgen::prelude::*;
 use zomboid_engine::vfs;
-use zomboid_scene::scene::{iso, load_region, Scene};
-use zomboid_scene::sim::Player;
+use zomboid_scene::scene::{iso, load_region, Mover, Scene};
 
 /// Root under which the page mounts files (`game/media/...`).
 const ROOT: &str = "game";
@@ -20,7 +19,7 @@ pub fn mount(path: &str, data: Vec<u8>) {
 #[wasm_bindgen]
 pub struct WebScene {
     scene: Scene,
-    player: Player,
+    player: Mover,
 }
 
 #[wasm_bindgen]
@@ -79,12 +78,17 @@ impl WebScene {
     pub fn player_y(&self) -> f32 {
         self.player.y
     }
+    /// The floor the player is on.
     pub fn player_z(&self) -> i32 {
+        self.player.z.floor() as i32
+    }
+    /// Continuous height (fractional on stairs).
+    pub fn player_height(&self) -> f32 {
         self.player.z
     }
     /// World-pixel position of the player's feet (camera target).
     pub fn player_px(&self) -> Vec<f32> {
-        iso(self.player.x, self.player.y, self.player.z).to_vec()
+        iso(self.player.x, self.player.y, self.player_z()).to_vec()
     }
     /// The 9 floats of the player marker sprite.
     pub fn player_marker(&self) -> Vec<f32> {
@@ -103,7 +107,7 @@ impl WebScene {
             .toggle_door_near(self.player.x, self.player.y, self.player.z)
     }
     /// Move the player for `dt` seconds in screen direction (sx, sy), each -1, 0 or 1, at 4 squares per second
-    /// (a placeholder speed, as in the desktop client). Collision is the ported one. Returns whether it moved.
+    /// (a placeholder speed, as in the desktop client). Collision is the ported one and stairs change the floor. Returns whether it moved.
     pub fn step(&mut self, sx: f32, sy: f32, dt: f32) -> bool {
         // Screen axes are the world axes rotated by 45 degrees.
         let (wx, wy) = (sx + sy, sy - sx);
@@ -116,7 +120,7 @@ impl WebScene {
         let (dx, dy) = (wx / len * dist / n as f32, wy / len * dist / n as f32);
         let mut moved = false;
         for _ in 0..n {
-            moved |= self.player.step(&self.scene.collision, dx, dy);
+            moved |= self.scene.move_character(&mut self.player, dx, dy);
         }
         moved
     }

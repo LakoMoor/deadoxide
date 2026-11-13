@@ -22,6 +22,7 @@ use zomboid_engine::zombie::iso::iso_object::ObjectKind;
 use zomboid_engine::zombie::iso::iso_world::IsoWorld;
 use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::SpriteRef;
 use zomboid_engine::zombie::iso::sprite_details::iso_flag_type::IsoFlagType;
+use zomboid_engine::zombie::iso::sprite_details::iso_object_type::IsoObjectType;
 
 /// Instance layout matches the shader: rect (x,y,w,h in world px), uv (u0,v0,u1,v1), atlas layer.
 #[repr(C)]
@@ -330,6 +331,142 @@ impl GetSquare for SceneState {
         self.chunks[i].get_grid_square(x.rem_euclid(8), y.rem_euclid(8), z)
     }
 }
+
+/// Position of a character with a continuous height, as the original keeps it (`IsoMovingObject.x/y/z`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Mover {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+impl Scene {
+    /// zombie.iso.IsoMovingObject.setCurrentSquareFromPosition: the square under a position; where there is none at
+    /// that level, the first existing square below it (down to level 0).
+    pub fn current_square(&self, x: f32, y: f32, z: f32) -> Option<(i32, i32, i32)> {
+        let st = self.state.as_ref()?;
+        let (sx, sy, sz) = (x.floor() as i32, y.floor() as i32, z.floor() as i32);
+        if st.get_grid_square(sx, sy, sz).is_some() {
+            return Some((sx, sy, sz));
+        }
+        (0..=sz)
+            .rev()
+            .find(|n| st.get_grid_square(sx, sy, *n).is_some())
+            .map(|n| (sx, sy, n))
+    }
+
+    /// zombie.iso.IsoMovingObject.doStairs for a character that moved from square `last` to position `m`: sets the
+    /// height from the staircase under the character, snaps to the whole level when a top stair was just left, and
+    /// keeps the character off the open side of a stairwell. Ported from the decompiled method; unlike the squares'
+    /// stair heights it has NOT been compared with the original in motion. Climbing states are not modelled.
+    pub fn do_stairs(&self, last: (i32, i32, i32), m: &mut Mover) {
+        let Some(st) = self.state.as_ref() else {
+            return;
+        };
+        let sq = |x: i32, y: i32, z: i32| st.get_grid_square(x, y, z);
+        let Some(last_sq) = sq(last.0, last.1, last.2) else {
+            return;
+        };
+        let Some(c) = self.current_square(m.x, m.y, m.z) else {
+            return;
+        };
+        let Some(mut current) = sq(c.0, c.1, c.2) else {
+            return;
+        };
+        use IsoObjectType::{stairsTN, stairsTW};
+        let top = |s: &IsoGridSquare| s.has_type(stairsTN) || s.has_type(stairsTW);
+        if top(current) && m.z - m.z.floor() < 0.1 {
+            if let Some(below) = sq(current.x, current.y, current.z - 1).filter(|b| top(b)) {
+                current = below;
+            }
+        }
+        if top(last_sq) {
+            // java.lang.Math.round(float)
+            m.z = (m.z + 0.5).floor();
+        }
+        let mut z = m.z;
+        if current.has_stairs() {
+            z = current.get_apparent_z(
+                &st.world.alias,
+                m.x - current.x as f32,
+                m.y - current.y as f32,
+                FBO_RENDER_CHUNK,
+            );
+        }
+        let frac = |v: f32| v - v.floor();
+        let has = |s: Option<&IsoGridSquare>, t: IsoObjectType| s.is_some_and(|s| s.has_type(t));
+        let up = sq(last_sq.x, last_sq.y, last_sq.z + 1);
+        if last_sq.has_type(stairsTN) && up.is_some_and(|u| u.has(IsoFlagType::WallN)) {
+            if frac(m.x) > 0.8 && !has(sq(last_sq.x + 1, last_sq.y, last_sq.z), stairsTN) {
+                m.x = m.x.floor() + 0.8;
+            }
+            if !current.has_stairs() {
+                m.y = (m.y + 0.5).floor();
+            }
+        }
+        if last_sq.has_type(stairsTW) && up.is_some_and(|u| u.has(IsoFlagType::WallW)) {
+            if frac(m.y) > 0.8 && !has(sq(last_sq.x, last_sq.y + 1, last_sq.z), stairsTW) {
+                m.y = m.y.floor() + 0.8;
+            }
+            if !current.has_stairs() {
+                m.x = (m.x + 0.5).floor();
+            }
+        }
+        let down = sq(current.x, current.y, current.z - 1);
+        if current.has(IsoFlagType::WallN) && has(down, stairsTN) {
+            if frac(m.x) > 0.8 && !has(sq(current.x + 1, current.y, current.z - 1), stairsTN) {
+                m.x = m.x.floor() + 0.8;
+            }
+            if frac(m.x) < 0.2 && !has(sq(current.x - 1, current.y, current.z - 1), stairsTN) {
+                m.x = m.x.floor() + 0.2;
+            }
+        }
+        if current.has(IsoFlagType::WallW) && has(down, stairsTW) {
+            if frac(m.y) > 0.8 && !has(sq(current.x, current.y + 1, current.z - 1), stairsTW) {
+                m.y = m.y.floor() + 0.8;
+            }
+            if frac(m.y) < 0.2 && !has(sq(current.x, current.y - 1, current.z - 1), stairsTW) {
+                m.y = m.y.floor() + 0.2;
+            }
+        }
+        if (z - m.z).abs() < 0.95 {
+            m.z = z;
+        }
+    }
+
+    /// One movement sub-step of a character by (dx, dy) squares: the step is refused when the ported collision
+    /// (matrix and doors/windows) blocks the way from the current square, tried per axis so the character slides
+    /// along walls (the sliding itself is a placeholder, not the original's response), then `do_stairs` runs.
+    pub fn move_character(&self, m: &mut Mover, dx: f32, dy: f32) -> bool {
+        let Some(last) = self.current_square(m.x, m.y, m.z) else {
+            return false;
+        };
+        let mut moved = false;
+        for (ax, ay) in [(dx, 0.0), (0.0, dy)] {
+            if ax == 0.0 && ay == 0.0 {
+                continue;
+            }
+            let from = (m.x.floor() as i32, m.y.floor() as i32);
+            let to = ((m.x + ax).floor() as i32, (m.y + ay).floor() as i32);
+            if from == to || self.collision.can_step(from, to, last.2) {
+                m.x += ax;
+                m.y += ay;
+                moved = true;
+            }
+        }
+        if moved {
+            self.do_stairs(last, m);
+            // snapZToCurrentSquare
+            if let Some(c) = self.current_square(m.x, m.y, m.z) {
+                m.z = m.z.min(c.2 as f32 + 0.99999);
+            }
+        }
+        moved
+    }
+}
+
+/// `PerformanceSettings.fboRenderChunk`: true in the original's default settings; it shifts stair heights by 0.1.
+const FBO_RENDER_CHUNK: bool = true;
 
 impl Scene {
     /// zombie.iso.LosUtil.lineClear between two squares of one level, as a client computes it; a closed window or
@@ -757,6 +894,42 @@ mod collision_oracle_tests {
             !scene.collision.can_step(inside, outside, 0),
             "closed again"
         );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "real-content acceptance: loads a complete cell and texture atlas"]
+    fn walking_the_staircase_changes_the_floor() -> anyhow::Result<()> {
+        // A north-facing staircase of the original map: bottom (8118, 11614, 0), middle 11613, top 11612
+        // (StairsProbe output of the original). Walk up from the south, then back down.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let scene = load_region(&root, 31, 45, 31, 45)?;
+        let mut m = Mover {
+            x: 8118.5,
+            y: 11615.5,
+            z: 0.0,
+        };
+        let mut heights = vec![m.z];
+        for _ in 0..45 {
+            assert!(scene.move_character(&mut m, 0.0, -0.1), "blocked at {m:?}");
+            heights.push(m.z);
+        }
+        assert!(
+            heights.windows(2).all(|w| w[1] >= w[0]),
+            "height never drops on the way up: {heights:?}"
+        );
+        assert_eq!(m.z, 1.0, "arrived on the upper floor at {m:?}");
+        assert_eq!(scene.current_square(m.x, m.y, m.z), Some((8118, 11611, 1)));
+        for _ in 0..45 {
+            assert!(
+                scene.move_character(&mut m, 0.0, 0.1),
+                "blocked on the way down at {m:?}"
+            );
+        }
+        assert_eq!(scene.current_square(m.x, m.y, m.z), Some((8118, 11615, 0)));
+        // doStairs leaves the height of the last point on the bottom stair; what brings a character back to exactly
+        // the floor in the original (some part of IsoGameCharacter) is not ported.
+        assert!(m.z < 0.1, "{m:?}");
         Ok(())
     }
 
