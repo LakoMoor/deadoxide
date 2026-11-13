@@ -80,4 +80,19 @@ mover_case() {
   fi
 }
 sel mover && mover_case
+# movercollide: objects pushed against the walls, doors and furniture of the spawn house (and up a staircase).
+movercollide_case() {
+  cell=$1; rc=$2; shift 2
+  javac -nowarn -encoding UTF-8 -cp "$ROOT/projectzomboid.jar" -d target/original-probe tests/original_probe/ServerHarness.java tests/original_probe/MoverCollideProbe.java 2>target/oracle/mc.javac || { echo "FAIL movercollide (javac)"; fail=1; return; }
+  (cd "$ROOT" && java -Djava.awt.headless=true --enable-final-field-mutation=ALL-UNNAMED -Djava.library.path="$PZ_NATIVES" -Xmx4g -cp "$HERE/target/original-probe:projectzomboid.jar" MoverCollideProbe "$HERE/target/oracle/pz-oracle-mc" $cell "$@" >"$HERE/target/oracle/mc.java.txt" 2>"$HERE/target/oracle/mc.java.err") || { echo "FAIL movercollide (server probe)"; fail=1; return; }
+  cargo run -q --release -p zomboid-scene --example mover_collide -- "$ROOT" $rc "$@" >target/oracle/mc.rust.txt 2>target/oracle/mc.rust.err || { echo "FAIL movercollide (rust)"; fail=1; return; }
+  if cmp -s target/oracle/mc.java.txt target/oracle/mc.rust.txt; then
+    cp target/oracle/mc.java.txt "tests/golden/mover_collide_$(echo $rc | tr ' ' '_').txt"
+    echo "OK   movercollide $cell: $(wc -l <target/oracle/mc.java.txt | tr -d ' ') lines identical"
+  else
+    echo "FAIL movercollide $cell: first differences:"; diff target/oracle/mc.java.txt target/oracle/mc.rust.txt | head -6; fail=1
+  fi
+}
+sel movercollide && movercollide_case "129 182" "32 45" 8303.5 11689.5 0.0697 0.0070 80 8303.5 11689.5 0.0617 0.0331 80 8303.5 11689.5 0.0443 0.0542 80 8303.5 11689.5 0.0202 0.0670 80 8303.5 11689.5 -0.0070 0.0697 80 8303.5 11689.5 -0.0331 0.0617 80 8303.5 11689.5 -0.0542 0.0443 80 8303.5 11689.5 -0.0670 0.0202 80 8303.5 11689.5 -0.0697 -0.0070 80 8303.5 11689.5 -0.0617 -0.0331 80 8303.5 11689.5 -0.0443 -0.0542 80 8303.5 11689.5 -0.0202 -0.0670 80 8303.5 11689.5 0.0070 -0.0697 80 8303.5 11689.5 0.0331 -0.0617 80 8303.5 11689.5 0.0542 -0.0443 80 8303.5 11689.5 0.0670 -0.0202 80 8288.5 11702.5 -0.05 0.01 40 8290.3 11698.2 0.06 0.06 80
+sel movercollide && movercollide_case "126 181" "31 45" 8118.5 11615.5 0.001 -0.08 70
 exit $fail

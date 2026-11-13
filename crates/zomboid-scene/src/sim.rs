@@ -43,6 +43,10 @@ impl Collision {
             self.special.insert((x, y, z), mask);
         }
     }
+    /// zombie.iso.IsoGridSquare.collideMatrix of a loaded square.
+    pub fn collide_matrix(&self, x: i32, y: i32, z: i32) -> Option<i32> {
+        self.collide_matrix.get(&(x, y, z)).copied()
+    }
     fn f(&self, x: i32, y: i32, z: i32) -> u16 {
         self.flags.get(&(x, y, z)).copied().unwrap_or(0)
     }

@@ -360,6 +360,24 @@ impl Scene {
     /// keeps the character off the open side of a stairwell. Compared with the original through MoverProbe (a character moved by hand over
     /// a north and a west staircase, up and down: positions, heights and squares identical). Climbing states are not modelled.
     pub fn do_stairs(&self, last: (i32, i32, i32), m: &mut Mover) {
+        self.do_stairs_for(last, m, true)
+    }
+
+    /// `do_stairs` for a character (`is_character`: the height snaps to the whole level after a top stair) or for
+    /// another moving object.
+    pub fn do_stairs_for(&self, last: (i32, i32, i32), m: &mut Mover, is_character: bool) {
+        let current = self.current_square(m.x, m.y, m.z);
+        self.do_stairs_at(last, current, m, is_character)
+    }
+
+    /// `doStairs` with the object's current square given (the original uses the square set before the move).
+    pub fn do_stairs_at(
+        &self,
+        last: (i32, i32, i32),
+        current: Option<(i32, i32, i32)>,
+        m: &mut Mover,
+        is_character: bool,
+    ) {
         let Some(st) = self.state.as_ref() else {
             return;
         };
@@ -367,7 +385,7 @@ impl Scene {
         let Some(last_sq) = sq(last.0, last.1, last.2) else {
             return;
         };
-        let Some(c) = self.current_square(m.x, m.y, m.z) else {
+        let Some(c) = current else {
             return;
         };
         let Some(mut current) = sq(c.0, c.1, c.2) else {
@@ -380,7 +398,7 @@ impl Scene {
                 current = below;
             }
         }
-        if top(last_sq) {
+        if is_character && top(last_sq) {
             // java.lang.Math.round(float)
             m.z = (m.z + 0.5).floor();
         }
@@ -434,31 +452,326 @@ impl Scene {
         }
     }
 
-    /// One movement sub-step of a character by (dx, dy) squares: the step is refused when the ported collision
-    /// (matrix and doors/windows) blocks the way from the current square, tried per axis so the character slides
-    /// along walls (the sliding itself is a placeholder, not the original's response), then `do_stairs` runs.
+    /// One tick of a character wanting to move by (dx, dy) squares: the original's movement resolution for moving
+    /// objects (`postupdate`: collision with walls, doors and windows, sliding along the free axis, 3/4 speed on
+    /// stairs), with the character rule of `doStairs` (the height snaps to the level after a top stair). The
+    /// original additionally pushes characters out of walls with its polygon collision (`PolygonalMap2`), which is
+    /// not ported, so a character can stand closer to a wall here.
     pub fn move_character(&self, m: &mut Mover, dx: f32, dy: f32) -> bool {
-        let Some(last) = self.current_square(m.x, m.y, m.z) else {
+        let mut o = MovingObject::new(m.x, m.y, m.z, self.current_square(m.x, m.y, m.z));
+        o.nx = m.x + dx;
+        o.ny = m.y + dy;
+        self.postupdate_for(&mut o, true);
+        let moved = o.x != m.x || o.y != m.y;
+        *m = Mover {
+            x: o.x,
+            y: o.y,
+            z: o.z,
+        };
+        moved
+    }
+}
+
+/// zombie.iso.IsoMovingObject: the movement state of an object that is not a character (no polygon collision, no
+/// states): position, the position it wants to reach this tick, and what it collided with.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MovingObject {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    /// `nx`, `ny`: where the object tries to be at the end of the tick.
+    pub nx: f32,
+    pub ny: f32,
+    /// `lx`, `ly`: position at the start of the tick.
+    pub lx: f32,
+    pub ly: f32,
+    pub current: Option<(i32, i32, i32)>,
+    pub last: Option<(i32, i32, i32)>,
+    pub alt_collide: bool,
+    pub collided_n: bool,
+    pub collided_s: bool,
+    pub collided_w: bool,
+    pub collided_e: bool,
+    pub collided_this_frame: bool,
+}
+
+impl MovingObject {
+    pub fn new(x: f32, y: f32, z: f32, current: Option<(i32, i32, i32)>) -> Self {
+        MovingObject {
+            x,
+            y,
+            z,
+            nx: x,
+            ny: y,
+            lx: x,
+            ly: y,
+            current,
+            last: None,
+            alt_collide: false,
+            collided_n: false,
+            collided_s: false,
+            collided_w: false,
+            collided_e: false,
+            collided_this_frame: false,
+        }
+    }
+}
+
+impl Scene {
+    /// zombie.iso.IsoGridSquare.testCollideAdjacent for an object that is not a player: doors, windows and window
+    /// frames first, then the square's collide matrix.
+    pub fn test_collide_adjacent(&self, from: (i32, i32, i32), x: i32, y: i32, z: i32) -> bool {
+        let Some(st) = self.state.as_ref() else {
+            return true;
+        };
+        let Some(matrix) = self.collision.collide_matrix(from.0, from.1, from.2) else {
+            return true;
+        };
+        if matrix == -1
+            || !(-1..=1).contains(&x)
+            || !(-1..=1).contains(&y)
+            || !(-1..=1).contains(&z)
+        {
+            return true;
+        }
+        if let (Some(a), Some(b)) = (
+            st.get_grid_square(from.0, from.1, from.2),
+            st.get_grid_square(from.0 + x, from.1 + y, from.2 + z),
+        ) {
+            if a.test_collide_special_objects(&st.world.alias, Some(b), st)
+                .is_some()
+            {
+                return true;
+            }
+        }
+        (matrix >> ((x + 1) + (y + 1) * 3 + (z + 1) * 9)) & 1 == 1
+    }
+
+    /// zombie.iso.IsoMovingObject.findCurrentGridSquare: the square at the position, searching towards level 0.
+    fn find_current_grid_square(&self, x: f32, y: f32, z: f32) -> Option<(i32, i32, i32)> {
+        let st = self.state.as_ref()?;
+        let (xi, yi, mut zi) = (x.floor() as i32, y.floor() as i32, z.floor() as i32);
+        let sign = zi.signum();
+        loop {
+            if st.get_grid_square(xi, yi, zi).is_some() {
+                return Some((xi, yi, zi));
+            }
+            zi -= sign;
+            if zi == -sign {
+                return None;
+            }
+        }
+    }
+
+    /// zombie.iso.IsoMovingObject.DoCollide: does the step to (nx, ny) cross into a blocked square, or does the
+    /// "feeler" half a square ahead touch one? Sets the collided-direction flags; `favour` 1 keeps the north/south
+    /// flags of a diagonal hit, 2 keeps east/west.
+    fn do_collide(&self, o: &mut MovingObject, favour: i32) -> bool {
+        let Some(st) = self.state.as_ref() else {
             return false;
         };
-        let mut moved = false;
-        for (ax, ay) in [(dx, 0.0), (0.0, dy)] {
-            if ax == 0.0 && ay == 0.0 {
-                continue;
+        // setCurrentSquareFromPosition(nx, ny) with the object's height
+        o.current = self.current_square(o.nx, o.ny, o.z);
+        if o.current.is_none() {
+            if o.nx != o.lx || o.ny != o.ly {
+                // Walking off the loaded world: stay where the tick started.
+                o.collided_w |= o.nx < o.lx;
+                o.collided_e |= o.nx > o.lx;
+                o.collided_n |= o.ny < o.ly;
+                o.collided_s |= o.ny > o.ly;
+                o.nx = o.lx;
+                o.ny = o.ly;
+                o.current = o.last;
+                o.collided_this_frame = true;
+                return true;
             }
-            let from = (m.x.floor() as i32, m.y.floor() as i32);
-            let to = ((m.x + ax).floor() as i32, (m.y + ay).floor() as i32);
-            if from == to || self.collision.can_step(from, to, last.2) {
-                m.x += ax;
-                m.y += ay;
-                moved = true;
+            return false;
+        }
+        let favour_flags = |o: &mut MovingObject| {
+            if (o.collided_s || o.collided_n) && (o.collided_e || o.collided_w) {
+                if favour == 2 {
+                    o.collided_s = false;
+                    o.collided_n = false;
+                } else if favour == 1 {
+                    o.collided_w = false;
+                    o.collided_e = false;
+                }
+            }
+        };
+        if let (Some(cur), Some(last)) = (o.current, o.last) {
+            if cur != last {
+                if self.test_collide_adjacent(last, cur.0 - last.0, cur.1 - last.1, cur.2 - last.2)
+                {
+                    o.collided_e |= last.0 < cur.0;
+                    o.collided_w |= last.0 > cur.0;
+                    o.collided_s |= last.1 < cur.1;
+                    o.collided_n |= last.1 > cur.1;
+                    o.current = Some(last);
+                    favour_flags(o);
+                    o.collided_this_frame = true;
+                    return true;
+                }
+                return false;
             }
         }
-        if moved {
-            self.do_stairs(last, m);
-            // snapZToCurrentSquare does nothing for the probed character (shouldSnapZToCurrentSquare was false there).
+        if o.nx != o.lx || o.ny != o.ly {
+            // getFeelerTile(feelersize = 0.5): Vector2.setLength normalises unless the length is already 1.
+            let (mut vx, mut vy) = (o.nx - o.lx, o.ny - o.ly);
+            let len_sq = vx * vx + vy * vy;
+            if (1.0 - len_sq).abs() >= 1.0e-5 {
+                if len_sq == 0.0 {
+                    vx = 0.0;
+                    vy = 0.0;
+                } else {
+                    let len = (len_sq as f64).sqrt() as f32;
+                    vx /= len;
+                    vy /= len;
+                }
+            }
+            let feeler = Some((
+                (o.x + vx * 0.5).floor() as i32,
+                (o.y + vy * 0.5).floor() as i32,
+                o.z.floor() as i32,
+            ))
+            .filter(|f| st.get_grid_square(f.0, f.1, f.2).is_some());
+            if let (Some(f), Some(cur)) = (feeler, o.current) {
+                if f != cur
+                    && self.test_collide_adjacent(cur, f.0 - cur.0, f.1 - cur.1, f.2 - cur.2)
+                {
+                    if o.last.is_some() {
+                        o.collided_e |= cur.0 < f.0;
+                        o.collided_w |= cur.0 > f.0;
+                        o.collided_s |= cur.1 < f.1;
+                        o.collided_n |= cur.1 > f.1;
+                        favour_flags(o);
+                    }
+                    o.collided_this_frame = true;
+                    return true;
+                }
+            }
         }
-        moved
+        false
+    }
+
+    /// zombie.iso.IsoMovingObject.postupdate for an object that is not a character: resolves the wanted step
+    /// (`nx`, `ny`) against walls, doors and windows, sliding along the axis that is free, slows down on stairs,
+    /// then follows stairs. The caller sets `lx`/`ly` (as `update` does) and `nx`/`ny` before each call.
+    pub fn postupdate(&self, o: &mut MovingObject) {
+        self.postupdate_for(o, false)
+    }
+
+    /// `postupdate` with the character variants of `doStairs` and of the height snap (which a character skips).
+    pub fn postupdate_for(&self, o: &mut MovingObject, is_character: bool) {
+        if o.current.is_none() {
+            // ensureOnTile does nothing for a non-player without a square; the rest still runs.
+        }
+        o.collided_this_frame = false;
+        o.collided_n = false;
+        o.collided_s = false;
+        o.collided_w = false;
+        o.collided_e = false;
+        o.last = o.current;
+        let (tx, ty) = (o.nx - o.x, o.ny - o.y);
+        let tl = ((tx * tx + ty * ty) as f64).sqrt() as f32;
+        if tl > 1.0 {
+            o.nx = o.x + tx / tl;
+            o.ny = o.y + ty / tl;
+        }
+        let (onx, ony) = (o.nx, o.ny);
+        let pass = |s: &Scene, o: &mut MovingObject, first: i32, second: i32| -> bool {
+            let mut did = false;
+            s.do_collide(o, first);
+            if o.collided_n || o.collided_s {
+                o.ny = o.ly;
+            }
+            if o.collided_w || o.collided_e {
+                o.nx = o.lx;
+            }
+            s.do_collide(o, second);
+            if o.collided_n || o.collided_s {
+                o.ny = o.ly;
+                did = true;
+            }
+            if o.collided_w || o.collided_e {
+                o.nx = o.lx;
+                did = true;
+            }
+            did
+        };
+        let (a, b) = if o.alt_collide { (2, 1) } else { (1, 2) };
+        let did = pass(self, o, a, b);
+        o.alt_collide = !o.alt_collide;
+        let len = (o.nx - o.lx).abs() + (o.ny - o.ly).abs();
+        let (lnx, lny) = (o.nx, o.ny);
+        o.nx = onx;
+        o.ny = ony;
+        if did {
+            let (a, b) = if o.alt_collide { (2, 1) } else { (1, 2) };
+            pass(self, o, a, b);
+            if (o.nx - o.lx).abs() + (o.ny - o.ly).abs() < len {
+                o.nx = lnx;
+                o.ny = lny;
+            }
+        }
+        if o.collided_this_frame {
+            o.current = o.last;
+        }
+        let (mut dx, mut dy) = (o.nx - o.x, o.ny - o.y);
+        // getGlobalMovementMod: three quarters of the speed on stairs.
+        let on_stairs = o
+            .current
+            .and_then(|c| {
+                self.state
+                    .as_ref()
+                    .and_then(|st| st.get_grid_square(c.0, c.1, c.2))
+            })
+            .is_some_and(|s| s.has_stairs());
+        let movement_mod = if dx.abs() > 0.0 || dy.abs() > 0.0 {
+            if on_stairs {
+                0.75
+            } else {
+                1.0
+            }
+        } else {
+            0.0
+        };
+        if dx.abs() > 0.01 || dy.abs() > 0.01 {
+            dx *= movement_mod;
+            dy *= movement_mod;
+        }
+        o.x += dx;
+        o.y += dy;
+        o.nx = o.x;
+        o.ny = o.y;
+        // doStairs uses the square set during collision and the previous one; handleSlopedSurface is not ported.
+        if let (Some(_), Some(last)) = (o.current, o.last) {
+            let mut m = Mover {
+                x: o.x,
+                y: o.y,
+                z: o.z,
+            };
+            self.do_stairs_at(last, o.current, &mut m, is_character);
+            o.x = m.x;
+            o.y = m.y;
+            o.z = m.z;
+            o.nx = o.x;
+            o.ny = o.y;
+        }
+        o.current = self.find_current_grid_square(o.x, o.y, o.z);
+        // snapZToCurrentSquare
+        if let Some(c) = o.current.filter(|_| !is_character) {
+            o.z = o.z.min(c.2 as f32 + 0.99999);
+        }
+        if o.current.is_none() {
+            if let Some(last) = o.last {
+                o.current = Some(last);
+                o.x = last.0 as f32 + 0.5;
+                o.y = last.1 as f32 + 0.5;
+                o.nx = o.x;
+                o.ny = o.y;
+                o.z = o.z.min(last.2 as f32 + 0.99999);
+            }
+        }
     }
 }
 
@@ -907,7 +1220,7 @@ mod collision_oracle_tests {
             z: 0.0,
         };
         let mut heights = vec![m.z];
-        for _ in 0..45 {
+        for _ in 0..60 {
             assert!(scene.move_character(&mut m, 0.0, -0.1), "blocked at {m:?}");
             heights.push(m.z);
         }
@@ -916,8 +1229,8 @@ mod collision_oracle_tests {
             "height never drops on the way up: {heights:?}"
         );
         assert_eq!(m.z, 1.0, "arrived on the upper floor at {m:?}");
-        assert_eq!(scene.current_square(m.x, m.y, m.z), Some((8118, 11611, 1)));
-        for _ in 0..45 {
+        assert_eq!(scene.current_square(m.x, m.y, m.z), Some((8118, 11610, 1)));
+        for _ in 0..60 {
             assert!(
                 scene.move_character(&mut m, 0.0, 0.1),
                 "blocked on the way down at {m:?}"
