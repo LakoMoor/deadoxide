@@ -366,6 +366,8 @@ struct App {
     keys: std::collections::HashSet<KeyCode>,
     drag: Option<(f64, f64)>,
     last: std::time::Instant,
+    /// Continuous height of the player (fractional on stairs); `None` until the first move.
+    height: Option<f32>,
 }
 
 impl ApplicationHandler for App {
@@ -505,9 +507,39 @@ impl ApplicationHandler for App {
                 // fixed-step simulation (30 Hz), render interpolation not implemented
                 self.acc += dt.min(0.25);
                 while self.acc >= 1.0 / TICK_HZ {
-                    if let Err(error) =
-                        advance_world(&mut self.world, &self.scene.collision, (sx, sy), &self.lua)
-                    {
+                    // The player moves through the scene's ported collision and stairs (4 squares per second is a
+                    // placeholder speed); the world step then only advances the clock and the placeholder zombies.
+                    let len = (sx * sx + sy * sy).sqrt();
+                    if len > 0.0 {
+                        let p = self.world.player;
+                        let mut m = Mover {
+                            x: p.x,
+                            y: p.y,
+                            z: self.height.unwrap_or(p.z as f32),
+                        };
+                        let d = 4.0 / TICK_HZ;
+                        self.scene
+                            .move_character(&mut m, sx / len * d, sy / len * d);
+                        self.height = Some(m.z);
+                        let floor = m.z.floor() as i32;
+                        if floor != p.z {
+                            // show the floor the player is on (level index = z - min_level)
+                            let top = self.scene.level_ranges.len() - 2;
+                            self.cam.max_level =
+                                ((floor - self.scene.min_level).max(0) as usize).min(top);
+                        }
+                        self.world.player = Player {
+                            x: m.x,
+                            y: m.y,
+                            z: floor,
+                        };
+                    }
+                    if let Err(error) = advance_world(
+                        &mut self.world,
+                        &self.scene.collision,
+                        (0.0, 0.0),
+                        &self.lua,
+                    ) {
                         log::error!("Lua event dispatch failed: {error}");
                     }
                     self.acc -= 1.0 / TICK_HZ;
@@ -881,6 +913,7 @@ fn main() -> anyhow::Result<()> {
         keys: Default::default(),
         drag: None,
         last: std::time::Instant::now(),
+        height: None,
     })?;
     Ok(())
 }
