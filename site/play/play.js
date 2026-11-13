@@ -38,15 +38,20 @@ async function start(entries) {
   renderer = new Renderer($("view"));
   renderer.setAtlas(scene.atlas_width(), scene.atlas_height(), scene.atlas_layers(), (i) => scene.atlas_layer(i));
   scene.drop_atlas_pixels();
+  const inst = uploadInstances();
+  levelTop = spawn.z - scene.min_level() + 1;
+  status(`Cell ${cx}_${cy}: ${inst.length / 9} sprites, ${scene.unresolved()} without texture, built in ${((performance.now() - t0) / 1000).toFixed(1)} s. WASD or arrows: walk. E: open or close a door. Wheel: zoom. [ and ]: floors.`);
+  $("view").hidden = false;
+  $("view").focus();
+  requestAnimationFrame(frame);
+}
+
+function uploadInstances() {
   const inst = scene.instances();
   const all = new Float32Array(inst.length + 9);
   all.set(inst);
   renderer.setInstances(all);
-  levelTop = spawn.z - scene.min_level() + 1;
-  status(`Cell ${cx}_${cy}: ${inst.length / 9} sprites, ${scene.unresolved()} without texture, built in ${((performance.now() - t0) / 1000).toFixed(1)} s. WASD or arrows: walk. Wheel: zoom. [ and ]: floors.`);
-  $("view").hidden = false;
-  $("view").focus();
-  requestAnimationFrame(frame);
+  return inst;
 }
 
 function frame(now) {
@@ -70,6 +75,7 @@ function frame(now) {
 addEventListener("keydown", (e) => {
   keys.add(e.code);
   if (!scene) return;
+  if (e.code === "KeyE" && !e.repeat && scene.interact()) uploadInstances();
   if (e.code === "BracketLeft") levelTop = Math.max(1, levelTop - 1);
   if (e.code === "BracketRight") levelTop = Math.min(scene.level_ranges().length - 1, levelTop + 1);
   if (e.code.startsWith("Arrow")) e.preventDefault();

@@ -29,7 +29,9 @@ for (const b of new Uint8Array(inst.buffer, inst.byteOffset, inst.byteLength)) h
 const before = [scene.player_x(), scene.player_y()];
 // walk "screen up" for one second: the spawn room's wall must stop the player inside the cell
 for (let i = 0; i < 30; i++) scene.step(0, -1, 1 / 30);
-const out = { files, megabytes: +(bytes / 1048576).toFixed(0), seconds: (Date.now() - t0) / 1000, sprites: inst.length / 9, unresolved: scene.unresolved(), atlas: [scene.atlas_width(), scene.atlas_height(), scene.atlas_layers()], levels: ranges.length - 1, instanceHash: h.toString(16), before, after: [scene.player_x(), scene.player_y()] };
+// the interact key away from any door does nothing
+const doorless = scene.interact();
+const out = { files, megabytes: +(bytes / 1048576).toFixed(0), seconds: (Date.now() - t0) / 1000, sprites: inst.length / 9, unresolved: scene.unresolved(), atlas: [scene.atlas_width(), scene.atlas_height(), scene.atlas_layers()], levels: ranges.length - 1, instanceHash: h.toString(16), doorless, before, after: [scene.player_x(), scene.player_y()] };
 console.log(JSON.stringify(out));
 if (process.argv[3]) {
   const want = JSON.parse(process.argv[3]);

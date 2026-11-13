@@ -46,6 +46,17 @@ struct Gfx {
 }
 
 impl Gfx {
+    /// Replace the instance buffer after the scene was rebuilt (a door changed).
+    fn set_instances(&mut self, scene: &Scene) {
+        self.inst_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("inst"),
+                contents: bytemuck::cast_slice(&scene.instances),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        self.level_ranges = scene.level_ranges.clone();
+    }
     fn new(
         device: wgpu::Device,
         queue: wgpu::Queue,
@@ -418,6 +429,14 @@ impl ApplicationHandler for App {
                             KeyCode::Escape => el.exit(),
                             KeyCode::PageUp => {
                                 self.cam.max_level = (self.cam.max_level + 1).min(top)
+                            }
+                            KeyCode::KeyE if !event.repeat => {
+                                let p = self.world.player;
+                                if self.scene.toggle_door_near(p.x, p.y, p.z) {
+                                    if let Some(g) = self.live.as_mut().map(|l| &mut l.gfx) {
+                                        g.set_instances(&self.scene);
+                                    }
+                                }
                             }
                             KeyCode::PageDown => {
                                 self.cam.max_level = self.cam.max_level.saturating_sub(1)

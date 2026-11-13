@@ -96,6 +96,12 @@ impl WebScene {
             .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
             .collect()
     }
+    /// The interact key: open or close the nearest ordinary door within reach. After `true` the page must fetch
+    /// `instances()` and `level_ranges()` again.
+    pub fn interact(&mut self) -> bool {
+        self.scene
+            .toggle_door_near(self.player.x, self.player.y, self.player.z)
+    }
     /// Move the player for `dt` seconds in screen direction (sx, sy), each -1, 0 or 1, at 4 squares per second
     /// (a placeholder speed, as in the desktop client). Collision is the ported one. Returns whether it moved.
     pub fn step(&mut self, sx: f32, sy: f32, dt: f32) -> bool {

@@ -16,6 +16,7 @@ use zomboid_engine::zombie::iso::cell_loader::{self, LoadContext};
 use zomboid_engine::zombie::iso::iso_chunk::IsoChunk;
 use zomboid_engine::zombie::iso::iso_grid_square::{GetSquare, IsoGridSquare};
 use zomboid_engine::zombie::iso::iso_meta_grid::AlarmSettings;
+use zomboid_engine::zombie::iso::iso_object::ObjectKind;
 use zomboid_engine::zombie::iso::iso_world::IsoWorld;
 use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::SpriteRef;
 use zomboid_engine::zombie::iso::sprite_details::iso_flag_type::IsoFlagType;
@@ -43,6 +44,8 @@ pub struct Scene {
     /// room id of every square that has one (room_id >= 0)
     pub rooms: std::collections::HashMap<(i32, i32, i32), i32>,
     pub clear: [f32; 3],
+    /// Present for scenes built by `load_region`.
+    pub state: Option<SceneState>,
 }
 
 pub const TILE_W: i32 = 128;
@@ -239,6 +242,12 @@ pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Sc
                     {
                         wanted.extend(world.sprites.sprite(*s).name.clone());
                     }
+                    // both states of a door, so that it can be opened later
+                    if let ObjectKind::IsoDoor(d) = &o.kind {
+                        for s in d.open_sprite.iter().chain(d.closed_sprite.iter()) {
+                            wanted.extend(world.sprites.sprite(*s).name.clone());
+                        }
+                    }
                 }
             }
         }
@@ -260,130 +269,234 @@ pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Sc
             .map_err(|e| e.to_string())
     });
     let atlas = build_atlas_from(&mut packs, &wanted, 8192, 8192).map_err(|e| anyhow!(e))?;
-    let mut collision = Collision::default();
-    {
-        let mut grid = RegionGrid(std::collections::HashMap::new());
-        for ch in &chunks {
-            for z in ch.get_min_level()..=ch.get_max_level() {
-                for i in 0..64 {
-                    if let Some(sq) = ch.get_grid_square(i % 8, i / 8, z) {
-                        grid.0.insert((sq.x, sq.y, sq.z), sq);
-                    }
-                }
-            }
-        }
-        for sq in grid.0.values() {
-            let (c, _path, _vision) = sq.calculate_matrices(&world.alias, &grid);
-            collision.set_collide_matrix(sq.x, sq.y, sq.z, c);
-            let mut mask = 0u16;
-            for dy in -1..=1 {
-                for dx in -1..=1 {
-                    let next = grid.get_grid_square(sq.x + dx, sq.y + dy, sq.z);
-                    if (dx != 0 || dy != 0)
-                        && sq
-                            .test_collide_special_objects(&world.alias, next, &grid)
-                            .is_some()
-                    {
-                        mask |= 1 << ((dx + 1) + (dy + 1) * 3);
-                    }
-                }
-            }
-            collision.set_special_blocks(sq.x, sq.y, sq.z, mask);
-        }
-    }
-    let (aw, ah) = (atlas.width as f32, atlas.height as f32);
-    let mut instances = Vec::new();
-    let mut level_ranges = vec![];
-    let mut unresolved = missing;
-    let mut meta = Vec::new();
-    // Room of every square inside a room rect (also squares without tiles), numbered by the meta grid's room handle.
-    let mut rooms = std::collections::HashMap::new();
-    for cy in y0..=y1 {
-        for cx in x0..=x1 {
-            let Some(cell) = world.meta_grid.get_cell_data(cx, cy) else {
-                continue;
-            };
-            for r in &cell.room_list {
-                let def = world.meta_grid.room(*r);
-                for q in &def.rects {
-                    for yy in q.y..q.y + q.h {
-                        for xx in q.x..q.x + q.w {
-                            rooms.insert((xx, yy, def.level), r.0 as i32);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    let by_pos: std::collections::HashMap<(i32, i32), &IsoChunk> =
-        chunks.iter().map(|c| ((c.wx, c.wy), c)).collect();
-    for z in zmin..=zmax {
-        level_ranges.push(instances.len() as u32);
-        for gy in y0 * 256..(y1 + 1) * 256 {
-            for gx in x0 * 256..(x1 + 1) * 256 {
-                let Some(ch) = by_pos.get(&(gx.div_euclid(8), gy.div_euclid(8))) else {
-                    continue;
-                };
-                let Some(sq) = ch.get_grid_square(gx.rem_euclid(8), gy.rem_euclid(8), z) else {
-                    continue;
-                };
-                let p = iso(gx as f32, gy as f32, z);
-                let (px, py) = (p[0] as i32, p[1] as i32);
-                let room = rooms.get(&(gx, gy, z)).copied().unwrap_or(-1);
-                for o in &sq.objects {
-                    for (k, spr) in o
-                        .sprite
-                        .iter()
-                        .chain(o.attached_anim_sprite.iter().flatten())
-                        .enumerate()
-                    {
-                        if k == 0 {
-                            let fl = sprite_collision_flags(&world, *spr);
-                            if fl != 0 {
-                                collision.add(gx, gy, z, fl);
+    let state = SceneState {
+        world,
+        chunks,
+        bounds: (x0, y0, x1, y1),
+        levels: (zmin, zmax),
+        missing,
+    };
+    let mut scene = Scene {
+        atlas,
+        instances: Vec::new(),
+        level_ranges: Vec::new(),
+        min_level: zmin,
+        unresolved: 0,
+        collision: Collision::default(),
+        meta: Vec::new(),
+        rooms: std::collections::HashMap::new(),
+        clear: [20.0 / 255.0, 24.0 / 255.0, 20.0 / 255.0],
+        state: Some(state),
+    };
+    scene.rebuild();
+    Ok(scene)
+}
+
+/// The engine-side world a scene was built from, kept so that the scene can change (doors) and be rebuilt.
+pub struct SceneState {
+    pub world: IsoWorld,
+    pub chunks: Vec<IsoChunk>,
+    bounds: (i32, i32, i32, i32),
+    levels: (i32, i32),
+    missing: u64,
+}
+
+impl Scene {
+    /// Recompute instances and collision from the engine squares (after an object changed).
+    pub fn rebuild(&mut self) {
+        let Some(state) = self.state.take() else {
+            return;
+        };
+        {
+            let SceneState {
+                world,
+                chunks,
+                bounds,
+                levels,
+                missing,
+            } = &state;
+            let (x0, y0, x1, y1) = *bounds;
+            let (zmin, zmax) = *levels;
+            let missing = *missing;
+            let atlas = &self.atlas;
+
+            let mut collision = Collision::default();
+            {
+                let mut grid = RegionGrid(std::collections::HashMap::new());
+                for ch in chunks.iter() {
+                    for z in ch.get_min_level()..=ch.get_max_level() {
+                        for i in 0..64 {
+                            if let Some(sq) = ch.get_grid_square(i % 8, i / 8, z) {
+                                grid.0.insert((sq.x, sq.y, sq.z), sq);
                             }
                         }
-                        let Some(s) = world
-                            .sprites
-                            .sprite(*spr)
-                            .name
-                            .as_ref()
-                            .and_then(|n| atlas.sprites.get(n))
-                        else {
-                            unresolved += 1;
+                    }
+                }
+                for sq in grid.0.values() {
+                    let (c, _path, _vision) = sq.calculate_matrices(&world.alias, &grid);
+                    collision.set_collide_matrix(sq.x, sq.y, sq.z, c);
+                    let mut mask = 0u16;
+                    for dy in -1..=1 {
+                        for dx in -1..=1 {
+                            let next = grid.get_grid_square(sq.x + dx, sq.y + dy, sq.z);
+                            if (dx != 0 || dy != 0)
+                                && sq
+                                    .test_collide_special_objects(&world.alias, next, &grid)
+                                    .is_some()
+                            {
+                                mask |= 1 << ((dx + 1) + (dy + 1) * 3);
+                            }
+                        }
+                    }
+                    collision.set_special_blocks(sq.x, sq.y, sq.z, mask);
+                }
+            }
+            let (aw, ah) = (atlas.width as f32, atlas.height as f32);
+            let mut instances = Vec::new();
+            let mut level_ranges = vec![];
+            let mut unresolved = missing;
+            let mut meta = Vec::new();
+            // Room of every square inside a room rect (also squares without tiles), numbered by the meta grid's room handle.
+            let mut rooms = std::collections::HashMap::new();
+            for cy in y0..=y1 {
+                for cx in x0..=x1 {
+                    let Some(cell) = world.meta_grid.get_cell_data(cx, cy) else {
+                        continue;
+                    };
+                    for r in &cell.room_list {
+                        let def = world.meta_grid.room(*r);
+                        for q in &def.rects {
+                            for yy in q.y..q.y + q.h {
+                                for xx in q.x..q.x + q.w {
+                                    rooms.insert((xx, yy, def.level), r.0 as i32);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            let by_pos: std::collections::HashMap<(i32, i32), &IsoChunk> =
+                chunks.iter().map(|c| ((c.wx, c.wy), c)).collect();
+            for z in zmin..=zmax {
+                level_ranges.push(instances.len() as u32);
+                for gy in y0 * 256..(y1 + 1) * 256 {
+                    for gx in x0 * 256..(x1 + 1) * 256 {
+                        let Some(ch) = by_pos.get(&(gx.div_euclid(8), gy.div_euclid(8))) else {
                             continue;
                         };
-                        let x = (px - s.orig_w / 2 + s.off_x) as f32;
-                        // renderYOffset (table stacking) is in unscaled pixels; the original multiplies by Core.tileScale (2).
-                        let y = (py + TILE_H - s.orig_h + s.off_y) as f32 - o.render_y_offset * 2.0;
-                        meta.push((gx, gy, z, room));
-                        instances.push(Instance {
-                            rect: [x, y, s.w as f32, s.h as f32],
-                            uv: [
-                                s.ax as f32 / aw,
-                                s.ay as f32 / ah,
-                                (s.ax as i32 + s.w) as f32 / aw,
-                                (s.ay as i32 + s.h) as f32 / ah,
-                            ],
-                            layer: s.layer as f32,
-                        });
+                        let Some(sq) = ch.get_grid_square(gx.rem_euclid(8), gy.rem_euclid(8), z)
+                        else {
+                            continue;
+                        };
+                        let p = iso(gx as f32, gy as f32, z);
+                        let (px, py) = (p[0] as i32, p[1] as i32);
+                        let room = rooms.get(&(gx, gy, z)).copied().unwrap_or(-1);
+                        for o in &sq.objects {
+                            for (k, spr) in o
+                                .sprite
+                                .iter()
+                                .chain(o.attached_anim_sprite.iter().flatten())
+                                .enumerate()
+                            {
+                                if k == 0 {
+                                    let fl = sprite_collision_flags(world, *spr);
+                                    if fl != 0 {
+                                        collision.add(gx, gy, z, fl);
+                                    }
+                                }
+                                let Some(s) = world
+                                    .sprites
+                                    .sprite(*spr)
+                                    .name
+                                    .as_ref()
+                                    .and_then(|n| atlas.sprites.get(n))
+                                else {
+                                    unresolved += 1;
+                                    continue;
+                                };
+                                let x = (px - s.orig_w / 2 + s.off_x) as f32;
+                                // renderYOffset (table stacking) is in unscaled pixels; the original multiplies by Core.tileScale (2).
+                                let y = (py + TILE_H - s.orig_h + s.off_y) as f32
+                                    - o.render_y_offset * 2.0;
+                                meta.push((gx, gy, z, room));
+                                instances.push(Instance {
+                                    rect: [x, y, s.w as f32, s.h as f32],
+                                    uv: [
+                                        s.ax as f32 / aw,
+                                        s.ay as f32 / ah,
+                                        (s.ax as i32 + s.w) as f32 / aw,
+                                        (s.ay as i32 + s.h) as f32 / ah,
+                                    ],
+                                    layer: s.layer as f32,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            level_ranges.push(instances.len() as u32);
+            self.instances = instances;
+            self.level_ranges = level_ranges;
+            self.unresolved = unresolved;
+            self.collision = collision;
+            self.meta = meta;
+            self.rooms = rooms;
+        }
+        self.state = Some(state);
+    }
+
+    /// The player's "interact" on doors: flips the nearest ordinary door within reach of (x, y) on level z
+    /// (zombie.iso.objects.IsoDoor.ToggleDoorSilent: no locks, keys, sounds or obstruction checks yet; double and
+    /// garage doors are left alone) and rebuilds the scene. Returns whether a door was toggled.
+    pub fn toggle_door_near(&mut self, x: f32, y: f32, z: i32) -> bool {
+        let Some(state) = self.state.as_mut() else {
+            return false;
+        };
+        let SceneState { world, chunks, .. } = state;
+        let mut best: Option<(f32, usize, i32, i32, usize)> = None;
+        for (ci, ch) in chunks.iter().enumerate() {
+            if ((ch.wx * 8 + 4) as f32 - x).abs() > 8.0 || ((ch.wy * 8 + 4) as f32 - y).abs() > 8.0
+            {
+                continue;
+            }
+            for i in 0..64 {
+                let Some(sq) = ch.get_grid_square(i % 8, i / 8, z) else {
+                    continue;
+                };
+                for (oi, o) in sq.objects.iter().enumerate() {
+                    let ObjectKind::IsoDoor(d) = &o.kind else {
+                        continue;
+                    };
+                    let props = o.sprite.map(|s| &world.sprites.sprite(s).properties);
+                    if props.is_some_and(|p| {
+                        p.has_str(&world.alias, "DoubleDoor")
+                            || p.has_str(&world.alias, "GarageDoor")
+                    }) {
+                        continue;
+                    }
+                    // The door stands on the north or west edge of its square.
+                    let (dx, dy) = if d.north {
+                        (sq.x as f32 + 0.5, sq.y as f32)
+                    } else {
+                        (sq.x as f32, sq.y as f32 + 0.5)
+                    };
+                    let dist = ((dx - x).powi(2) + (dy - y).powi(2)).sqrt();
+                    if dist <= 1.5 && best.is_none_or(|b| dist < b.0) {
+                        best = Some((dist, ci, i % 8, i / 8, oi));
                     }
                 }
             }
         }
+        let Some((_, ci, lx, ly, oi)) = best else {
+            return false;
+        };
+        if let Some(sq) = chunks[ci].get_grid_square_mut(lx, ly, z) {
+            sq.objects[oi].toggle_door_silent();
+            sq.recalc_properties(&world.sprites);
+        }
+        self.rebuild();
+        true
     }
-    level_ranges.push(instances.len() as u32);
-    Ok(Scene {
-        atlas,
-        instances,
-        level_ranges,
-        min_level: zmin,
-        unresolved,
-        collision,
-        meta,
-        rooms,
-        clear: [20.0 / 255.0, 24.0 / 255.0, 20.0 / 255.0],
-    })
 }
 
 impl Scene {
@@ -552,6 +665,32 @@ mod collision_oracle_tests {
                 }
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "real-content acceptance: loads a complete cell and texture atlas"]
+    fn opening_the_spawn_house_door_lets_the_player_through() -> anyhow::Result<()> {
+        // (8288, 11702, 0) holds the closed west-edge door fixtures_doors_02_4 of the house's back room
+        // (ChunkObjectsProbe output of the original, chunk 1036,1462, square 0,6).
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let mut scene = load_region(&root, 32, 45, 32, 45)?;
+        let (inside, outside) = ((8288, 11702), (8287, 11702));
+        assert!(
+            !scene.collision.can_step(inside, outside, 0),
+            "closed door blocks"
+        );
+        assert!(scene.toggle_door_near(8288.4, 11702.5, 0));
+        assert!(
+            scene.collision.can_step(inside, outside, 0),
+            "open door lets through"
+        );
+        assert!(scene.collision.can_step(outside, inside, 0));
+        assert!(scene.toggle_door_near(8288.4, 11702.5, 0));
+        assert!(
+            !scene.collision.can_step(inside, outside, 0),
+            "closed again"
+        );
         Ok(())
     }
 

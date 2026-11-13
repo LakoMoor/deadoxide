@@ -58,6 +58,15 @@ export class WebScene {
         return v1;
     }
     /**
+     * The interact key: open or close the nearest ordinary door within reach. After `true` the page must fetch
+     * `instances()` and `level_ranges()` again.
+     * @returns {boolean}
+     */
+    interact() {
+        const ret = wasm.webscene_interact(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
      * Index of the first instance of each level, plus the total.
      * @returns {Uint32Array}
      */
