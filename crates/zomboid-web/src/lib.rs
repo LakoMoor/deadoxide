@@ -31,7 +31,7 @@ impl WebScene {
             .map_err(|e| JsError::new(&format!("{e:#}")))?;
         Ok(WebScene {
             scene,
-            player: Player { x, y, z },
+            player: Mover { x, y, z: z as f32 },
         })
     }
     /// 9 floats per sprite: rect x, y, w, h (world pixels), uv u0, v0, u1, v1, atlas layer. Painter's order.
@@ -94,7 +94,7 @@ impl WebScene {
     pub fn player_marker(&self) -> Vec<f32> {
         let m = self
             .scene
-            .marker("__player", self.player.x, self.player.y, self.player.z);
+            .marker("__player", self.player.x, self.player.y, self.player_z());
         bytemuck::bytes_of(&m)
             .chunks_exact(4)
             .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
@@ -104,7 +104,7 @@ impl WebScene {
     /// `instances()` and `level_ranges()` again.
     pub fn interact(&mut self) -> bool {
         self.scene
-            .toggle_door_near(self.player.x, self.player.y, self.player.z)
+            .toggle_door_near(self.player.x, self.player.y, self.player_z())
     }
     /// Move the player for `dt` seconds in screen direction (sx, sy), each -1, 0 or 1, at 4 squares per second
     /// (a placeholder speed, as in the desktop client). Collision is the ported one and stairs change the floor. Returns whether it moved.

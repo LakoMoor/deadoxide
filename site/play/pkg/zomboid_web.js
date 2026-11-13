@@ -101,6 +101,14 @@ export class WebScene {
         return this;
     }
     /**
+     * Continuous height (fractional on stairs).
+     * @returns {number}
+     */
+    player_height() {
+        const ret = wasm.webscene_player_height(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * The 9 floats of the player marker sprite.
      * @returns {Float32Array}
      */
@@ -135,6 +143,7 @@ export class WebScene {
         return ret;
     }
     /**
+     * The floor the player is on.
      * @returns {number}
      */
     player_z() {
@@ -143,7 +152,7 @@ export class WebScene {
     }
     /**
      * Move the player for `dt` seconds in screen direction (sx, sy), each -1, 0 or 1, at 4 squares per second
-     * (a placeholder speed, as in the desktop client). Collision is the ported one. Returns whether it moved.
+     * (a placeholder speed, as in the desktop client). Collision is the ported one and stairs change the floor. Returns whether it moved.
      * @param {number} sx
      * @param {number} sy
      * @param {number} dt
