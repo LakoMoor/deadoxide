@@ -1151,3 +1151,357 @@ impl IsoGridSquare {
         }
     }
 }
+
+/// zombie.iso.LosUtil.TestResults
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum TestResults {
+    Clear,
+    ClearThroughOpenDoor,
+    ClearThroughWindow,
+    Blocked,
+    ClearThroughClosedDoor,
+}
+
+/// zombie.iso.IsoObject.VisionResult
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum VisionResult {
+    NoEffect,
+    Blocked,
+    Unblocked,
+}
+
+impl IsoGridSquare {
+    /// zombie.iso.IsoGridSquare.HasElevatedFloor
+    pub fn has_elevated_floor(&self) -> bool {
+        [T::stairsTN, T::stairsMN, T::stairsTW, T::stairsMW]
+            .iter()
+            .any(|t| self.has_type(*t))
+    }
+
+    /// `TestVision` of doors, windows and curtains (zombie.iso.objects.IsoDoor/IsoWindow/IsoCurtain.TestVision) for
+    /// the object `o` standing on `owner`, looking from `from` to `to`. Door curtains are not modelled.
+    fn object_test_vision(
+        sm: &IsoSpriteManager,
+        alias: &TilePropertyAliasMap,
+        o: &IsoObject,
+        owner: &IsoGridSquare,
+        from: &IsoGridSquare,
+        to: &IsoGridSquare,
+    ) -> VisionResult {
+        if to.z != from.z {
+            return VisionResult::NoEffect;
+        }
+        let at_owner = std::ptr::eq(from, owner);
+        // The edge test shared by all three: from the owner square towards north/west, or into it from south/east.
+        let crosses = |north: bool| {
+            if at_owner {
+                north && to.y < from.y || !north && to.x < from.x
+            } else {
+                north && to.y > from.y || !north && to.x > from.x
+            }
+        };
+        match &o.kind {
+            ObjectKind::IsoDoor(d) => {
+                let trans = d.open
+                    || o.sprite
+                        .is_some_and(|s| sm.sprite(s).properties.has_str(alias, pt::DOOR_TRANS));
+                // An open door stands along the other edge.
+                let north = if d.open { !d.north } else { d.north };
+                if crosses(north) {
+                    if trans {
+                        VisionResult::Unblocked
+                    } else {
+                        VisionResult::Blocked
+                    }
+                } else {
+                    VisionResult::NoEffect
+                }
+            }
+            ObjectKind::IsoWindow(w) => {
+                if crosses(w.north) {
+                    VisionResult::Unblocked
+                } else {
+                    VisionResult::NoEffect
+                }
+            }
+            ObjectKind::IsoCurtain(c) => {
+                let ty = o.get_type(sm);
+                let own_side = at_owner && (ty == T::curtainW || ty == T::curtainN)
+                    || !at_owner && (ty == T::curtainE || ty == T::curtainS);
+                let hit = if own_side {
+                    c.north && to.y < from.y || !c.north && to.x < from.x
+                } else {
+                    c.north && to.y > from.y || !c.north && to.x > from.x
+                };
+                if hit && !c.open {
+                    VisionResult::Blocked
+                } else {
+                    VisionResult::NoEffect
+                }
+            }
+            _ => VisionResult::NoEffect,
+        }
+    }
+
+    /// zombie.iso.IsoGridSquare.DoDiagnalCheck
+    #[allow(clippy::too_many_arguments)]
+    fn do_diagnal_check<G: GetSquare>(
+        &self,
+        sm: &IsoSpriteManager,
+        alias: &TilePropertyAliasMap,
+        g: &G,
+        x: i32,
+        y: i32,
+        z: i32,
+        ignore_doors: bool,
+        server: bool,
+    ) -> TestResults {
+        let res = self.test_vision_adjacent(sm, alias, g, x, 0, z, false, ignore_doors, server);
+        if res == TestResults::Blocked {
+            return TestResults::Blocked;
+        }
+        let res2 = self.test_vision_adjacent(sm, alias, g, 0, y, z, false, ignore_doors, server);
+        if res2 == TestResults::Blocked {
+            return TestResults::Blocked;
+        }
+        if res != TestResults::ClearThroughWindow && res2 != TestResults::ClearThroughWindow {
+            self.test_vision_adjacent(sm, alias, g, x, y, z, false, ignore_doors, server)
+        } else {
+            TestResults::ClearThroughWindow
+        }
+    }
+
+    /// zombie.iso.IsoGridSquare.testVisionAdjacent: can one see from this square into the neighbour at offset
+    /// (x, y, z)? Uses the stored `vision_matrix` plus doors, windows and curtains on both squares. `server` is
+    /// `GameServer.server` (a client also checks diagonals from the far side).
+    #[allow(clippy::too_many_arguments)]
+    pub fn test_vision_adjacent<G: GetSquare>(
+        &self,
+        sm: &IsoSpriteManager,
+        alias: &TilePropertyAliasMap,
+        g: &G,
+        x: i32,
+        y: i32,
+        z: i32,
+        special_diag: bool,
+        ignore_doors: bool,
+        server: bool,
+    ) -> TestResults {
+        if !(-1..=1).contains(&x) || !(-1..=1).contains(&y) || !(-1..=1).contains(&z) {
+            return TestResults::Blocked;
+        }
+        if z == 1 && (x != 0 || y != 0) && self.has_elevated_floor() {
+            if let Some(sq) = g.get_grid_square(self.x, self.y, self.z + z) {
+                return sq.test_vision_adjacent(
+                    sm,
+                    alias,
+                    g,
+                    x,
+                    y,
+                    0,
+                    special_diag,
+                    ignore_doors,
+                    server,
+                );
+            }
+        }
+        if z == -1
+            && (x != 0 || y != 0)
+            && g.get_grid_square(self.x + x, self.y + y, self.z + z)
+                .is_some_and(|s| s.has_elevated_floor())
+        {
+            return self.test_vision_adjacent(
+                sm,
+                alias,
+                g,
+                x,
+                y,
+                0,
+                special_diag,
+                ignore_doors,
+                server,
+            );
+        }
+        if x != 0 && y != 0 && special_diag {
+            let mut test = self.do_diagnal_check(sm, alias, g, x, y, z, ignore_doors, server);
+            if !server && test != TestResults::Blocked {
+                if let Some(sq) = g.get_grid_square(self.x + x, self.y + y, self.z + z) {
+                    test = sq.do_diagnal_check(sm, alias, g, -x, -y, -z, ignore_doors, server);
+                }
+            }
+            return test;
+        }
+        let sq = g.get_grid_square(self.x + x, self.y + y, self.z + z);
+        let mut ret = TestResults::Clear;
+        match sq {
+            Some(sq) if sq.z == self.z => {
+                for owner in [self, sq] {
+                    for o in owner.objects.iter().filter(|o| o.special) {
+                        match (
+                            Self::object_test_vision(sm, alias, o, owner, self, sq),
+                            &o.kind,
+                        ) {
+                            (VisionResult::NoEffect, _) => {}
+                            (VisionResult::Unblocked, ObjectKind::IsoDoor(d)) => {
+                                ret = if d.open {
+                                    TestResults::ClearThroughOpenDoor
+                                } else {
+                                    TestResults::ClearThroughClosedDoor
+                                }
+                            }
+                            (VisionResult::Unblocked, ObjectKind::IsoWindow(_)) => {
+                                ret = TestResults::ClearThroughWindow
+                            }
+                            (VisionResult::Blocked, ObjectKind::IsoDoor(_)) if !ignore_doors => {
+                                return TestResults::Blocked
+                            }
+                            (
+                                VisionResult::Blocked,
+                                ObjectKind::IsoCurtain(_) | ObjectKind::IsoWindow(_),
+                            ) => return TestResults::Blocked,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            Some(sq)
+                if z > 0
+                    && (self.z != -1 || sq.z != 0)
+                    && sq.has(F::exterior)
+                    && !self.has(F::exterior) =>
+            {
+                ret = TestResults::Blocked
+            }
+            _ => {}
+        }
+        if (self.vision_matrix >> ((x + 1) + (y + 1) * 3 + (z + 1) * 9)) & 1 == 0 {
+            ret
+        } else {
+            TestResults::Blocked
+        }
+    }
+}
+
+/// zombie.iso.LosUtil.lineClear: line of sight between two squares, stepping along the longest axis and testing each
+/// pair of consecutive squares with `testVisionAdjacent`. `range_till_windows` limits how far one sees past a window
+/// (10000 in the short overload).
+#[allow(clippy::too_many_arguments)]
+pub fn line_clear<G: GetSquare>(
+    sm: &IsoSpriteManager,
+    alias: &TilePropertyAliasMap,
+    g: &G,
+    mut x0: i32,
+    mut y0: i32,
+    mut z0: i32,
+    x1: i32,
+    y1: i32,
+    mut z1: i32,
+    ignore_doors: bool,
+    range_till_windows: i32,
+    server: bool,
+) -> TestResults {
+    if z1 == z0 - 1
+        && g.get_grid_square(x1, y1, z1)
+            .is_some_and(|s| s.has_elevated_floor())
+    {
+        z1 = z0;
+    }
+    let mut test = TestResults::Clear;
+    let (dy, dx, dz) = (y1 - y0, x1 - x0, z1 - z0);
+    let (mut t, mut t2) = (0.5f32, 0.5f32);
+    let mut b = g.get_grid_square(x0, y0, z0);
+    let mut dist = 0;
+    // 0: step x, 1: step y, 2: step z
+    let axis = if dx.abs() > dy.abs() && dx.abs() > dz.abs() {
+        0
+    } else if dy.abs() >= dx.abs() && dy.abs() > dz.abs() {
+        1
+    } else {
+        2
+    };
+    let (main, o1, o2, c1, c2) = match axis {
+        0 => (dx, dy, dz, y0, z0),
+        1 => (dy, dx, dz, x0, z0),
+        _ => (dz, dx, dy, x0, y0),
+    };
+    if main == 0 {
+        return test;
+    }
+    let step = if main < 0 { -1 } else { 1 };
+    let m = o1 as f32 / main as f32 * step as f32;
+    let m2 = o2 as f32 / main as f32 * step as f32;
+    t += c1 as f32;
+    t2 += c2 as f32;
+    loop {
+        let done = match axis {
+            0 => x0 == x1,
+            1 => y0 == y1,
+            _ => z0 == z1,
+        };
+        if done {
+            return test;
+        }
+        t += m;
+        t2 += m2;
+        let (f1, f2) = (pz_fastfloor(t), pz_fastfloor(t2));
+        let a = match axis {
+            0 => {
+                x0 += step;
+                g.get_grid_square(x0, f1, f2)
+            }
+            1 => {
+                y0 += step;
+                g.get_grid_square(f1, y0, f2)
+            }
+            _ => {
+                z0 += step;
+                g.get_grid_square(f1, f2, z0)
+            }
+        };
+        let mut window_change = false;
+        if let (Some(a), Some(b)) = (a, b) {
+            let new_test = a.test_vision_adjacent(
+                sm,
+                alias,
+                g,
+                b.x - a.x,
+                b.y - a.y,
+                b.z - a.z,
+                true,
+                ignore_doors,
+                server,
+            );
+            if new_test == TestResults::ClearThroughWindow {
+                window_change = true;
+            }
+            if new_test != TestResults::Blocked
+                && test != TestResults::Clear
+                && (new_test != TestResults::ClearThroughWindow
+                    || test != TestResults::ClearThroughOpenDoor)
+            {
+                if new_test == TestResults::ClearThroughClosedDoor
+                    && test == TestResults::ClearThroughOpenDoor
+                {
+                    test = new_test;
+                }
+            } else {
+                test = new_test;
+            }
+            if test == TestResults::Blocked {
+                return TestResults::Blocked;
+            }
+            if window_change {
+                if dist > range_till_windows {
+                    return TestResults::Blocked;
+                }
+                dist = 0;
+            }
+        }
+        b = a;
+        dist += 1;
+    }
+}
+
+fn pz_fastfloor(v: f32) -> i32 {
+    crate::zombie::core::math::pz_math::fastfloor(v)
+}

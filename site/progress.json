@@ -1,19 +1,22 @@
 {
-  "generated": "2026-11-12",
+  "generated": "2026-11-13",
   "game": "Project Zomboid 42.21.0 (Steam build 25485521)",
   "overall": 21.4,
   "note": "Overall and area percentages are subjective weighted estimates, not measured game parity. Facts list the limited measured cases. Full compatibility is unknown.",
   "engine": {
-    "classesTouched": 59,
+    "classesTouched": 60,
     "classes": 3424,
-    "methodsCited": 277,
+    "methodsCited": 282,
     "methods": 46121,
-    "methodPercent": 0.6,
+    "methodPercent": 0.61,
     "oracleCases": [
       "basements",
       "chunkobjects",
       "collide",
+      "doortoggle",
       "entitysprites",
+      "los",
+      "losdoors",
       "lotheaders",
       "lotpack",
       "metagrid",
@@ -30,7 +33,7 @@
       "score": 0.5625,
       "how": "share of the game's format families we read (list below); coverage inside each family is also incomplete",
       "facts": [
-        "direct port from decompiled Java: 277 of 46121 method names (0.6%) in 59 of 3424 classes; byte-identical to the original in 9 oracle cases (basements, chunkobjects, collide, entitysprites, lotheaders, lotpack, metagrid, specialcollide, tiledefs)",
+        "direct port from decompiled Java: 282 of 46121 method names (0.61%) in 60 of 3424 classes; byte-identical to the original in 12 oracle cases (basements, chunkobjects, collide, doortoggle, entitysprites, los, losdoors, lotheaders, lotpack, metagrid, specialcollide, tiledefs)",
         "format families read: 9 of 16",
         "cell header parsed: 120687 of 123391 bytes",
         "tile names resolved: 25981 of 26063",
@@ -150,6 +153,6 @@
     "frameDiffBeforeMask": 79.68,
     "logKindsMatched": 22,
     "goldenLogLines": 22,
-    "testsPassed": 69
+    "testsPassed": 46
   }
 }

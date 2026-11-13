@@ -94,3 +94,13 @@ fn basements_match_original() {
 fn doortoggle_matches_original() {
     check_as("doortoggle", "specialcollide", &["129", "182", "toggle"]);
 }
+
+#[test]
+fn los_matches_original() {
+    check("los", &["129", "182"]);
+}
+
+#[test]
+fn los_with_doors_flipped_matches_original() {
+    check_as("losdoors", "los", &["129", "182", "toggle"]);
+}

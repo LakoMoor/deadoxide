@@ -11,7 +11,7 @@ use zomboid_engine::zombie::core::random::rand_abstract::RandAbstract;
 use zomboid_engine::zombie::core::tile_property_alias_map::TilePropertyAliasMap;
 use zomboid_engine::zombie::iso::cell_loader::{self, LoadContext};
 use zomboid_engine::zombie::iso::iso_chunk::IsoChunk;
-use zomboid_engine::zombie::iso::iso_grid_square::{GetSquare, IsoGridSquare};
+use zomboid_engine::zombie::iso::iso_grid_square::{line_clear, GetSquare, IsoGridSquare};
 use zomboid_engine::zombie::iso::iso_lot::IsoLot;
 use zomboid_engine::zombie::iso::iso_meta_grid::{AlarmSettings, IsoMetaGrid};
 use zomboid_engine::zombie::iso::iso_object::ObjectKind;
@@ -32,7 +32,10 @@ fn main() {
         Some("collide") if a.len() == 7 => collide(Path::new(&a[2]), &a[3..7]),
         Some("entitysprites") if a.len() == 3 => entitysprites(Path::new(&a[2])),
         Some("specialcollide") if a.len() == 5 || a.len() == 6 => {
-            specialcollide(Path::new(&a[2]), &a[3..])
+            specialcollide(Path::new(&a[2]), &a[3..], false)
+        }
+        Some("los") if a.len() == 5 || a.len() == 6 => {
+            specialcollide(Path::new(&a[2]), &a[3..], true)
         }
         Some("basements") if a.len() == 7 => basements(Path::new(&a[2]), &a[3..7]),
         _ => Err("usage: see the header of pz-dump.rs".into()),
@@ -790,7 +793,7 @@ pub fn entitysprites(root: &Path) -> Result<String, String> {
 }
 
 /// Collide matrices and door/window collision objects of one 64-square server cell; pairs with SpecialCollideProbe.java.
-pub fn specialcollide(root: &Path, cell: &[String]) -> Result<String, String> {
+pub fn specialcollide(root: &Path, cell: &[String], los: bool) -> Result<String, String> {
     let toggle = cell.len() == 3;
     let c: Vec<i32> = cell[..2]
         .iter()
@@ -848,6 +851,34 @@ pub fn specialcollide(root: &Path, cell: &[String]) -> Result<String, String> {
             }
         }
     }
+    if los {
+        // Store the vision matrices (RecalcAllWithNeighbours), which testVisionAdjacent reads.
+        let mut vm = Vec::new();
+        {
+            let mut all = Vec::new();
+            for ch in &chunks {
+                for z in ch.get_min_level()..=ch.get_max_level() {
+                    for i in 0..64 {
+                        all.extend(ch.get_grid_square(i % 8, i / 8, z));
+                    }
+                }
+            }
+            let grid = ChunkGrid(all.iter().map(|s| ((s.x, s.y, s.z), *s)).collect());
+            for sq in &all {
+                vm.push(sq.calculate_matrices(&world.alias, &grid).2);
+            }
+        }
+        let mut it = vm.into_iter();
+        for ch in &mut chunks {
+            for z in ch.get_min_level()..=ch.get_max_level() {
+                for i in 0..64 {
+                    if let Some(sq) = ch.get_grid_square_mut(i % 8, i / 8, z) {
+                        sq.vision_matrix = it.next().unwrap_or(0);
+                    }
+                }
+            }
+        }
+    }
     let mut all = Vec::new();
     for ch in &chunks {
         for z in ch.get_min_level()..=ch.get_max_level() {
@@ -859,6 +890,38 @@ pub fn specialcollide(root: &Path, cell: &[String]) -> Result<String, String> {
         }
     }
     let grid = ChunkGrid(all.iter().map(|s| ((s.x, s.y, s.z), *s)).collect());
+    if los {
+        let mut sb = String::new();
+        for sq in &all {
+            if sq.z != 0 || sq.x % 8 != 3 || sq.y % 8 != 3 {
+                continue;
+            }
+            let _ = write!(sb, "L {} {} ", sq.x, sq.y);
+            for z in 0..=1 {
+                for dy in -10..=10 {
+                    for dx in -10..=10 {
+                        let r = line_clear(
+                            &world.sprites,
+                            &world.alias,
+                            &grid,
+                            sq.x,
+                            sq.y,
+                            0,
+                            sq.x + dx,
+                            sq.y + dy,
+                            z,
+                            false,
+                            10000,
+                            true,
+                        );
+                        let _ = write!(sb, "{}", r as u8);
+                    }
+                }
+            }
+            sb.push('\n');
+        }
+        return Ok(sb);
+    }
     let mut sb = String::new();
     for sq in &all {
         let (cm, _, _) = sq.calculate_matrices(&world.alias, &grid);
