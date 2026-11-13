@@ -23,6 +23,7 @@ use zomboid_engine::zombie::iso::iso_world::IsoWorld;
 use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::SpriteRef;
 use zomboid_engine::zombie::iso::sprite_details::iso_flag_type::IsoFlagType;
 use zomboid_engine::zombie::iso::sprite_details::iso_object_type::IsoObjectType;
+use zomboid_engine::zombie::sandbox_options::SandboxOptions;
 
 /// Instance layout matches the shader: rect (x,y,w,h in world px), uv (u0,v0,u1,v1), atlas layer.
 #[repr(C)]
@@ -156,11 +157,16 @@ impl GetSquare for RegionGrid<'_> {
 /// fixed value here; random fields (locks, tints) are therefore the same on every run and tints are not drawn yet.
 pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Scene> {
     let mut rand = RandAbstract::new(java::Random::new(1));
+    // zombie.SandboxOptions as its constructor leaves it: declared defaults, then the "Apocalypse" preset.
+    let mut sandbox = SandboxOptions::new();
+    if let Ok(b) = vfs::read(&root.join("media/lua/shared/Sandbox/Apocalypse.lua")) {
+        sandbox.load_game_file(&String::from_utf8_lossy(&b));
+    }
     let alarm = AlarmSettings {
         last_stand: false,
         power_grid_exists: true,
-        alarm: 4,
-        alarm_decay: 1,
+        alarm: sandbox.get_int("Alarm").unwrap_or(4),
+        alarm_decay: sandbox.get_int("AlarmDecay").unwrap_or(2),
     };
     let mut world = IsoWorld::init(
         root,
@@ -188,7 +194,7 @@ pub fn load_region(root: &Path, x0: i32, y0: i32, x1: i32, y1: i32) -> Result<Sc
         smashed_window_sprite_map: &tile_definitions.smashed_window_sprite_map,
         meta_grid,
         rand: &mut rand,
-        locked_houses: 4,
+        locked_houses: sandbox.get_int("LockedHouses").unwrap_or(6),
         missing_tiles: Vec::new(),
         lotpack_cache: None,
     };

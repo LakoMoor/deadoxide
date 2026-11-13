@@ -31,6 +31,7 @@ fn main() {
         Some("chunkobjects") if a.len() == 7 => chunkobjects(Path::new(&a[2]), &a[3..7]),
         Some("collide") if a.len() == 7 => collide(Path::new(&a[2]), &a[3..7]),
         Some("entitysprites") if a.len() == 3 => entitysprites(Path::new(&a[2])),
+        Some("sandbox") if a.len() == 4 => sandbox(Path::new(&a[2]), Path::new(&a[3])),
         Some("specialcollide") if a.len() == 5 || a.len() == 6 => {
             specialcollide(Path::new(&a[2]), &a[3..], false)
         }
@@ -1110,5 +1111,35 @@ pub fn basements(root: &Path, range: &[String]) -> Result<String, String> {
             let _ = writeln!(sb, "H {cx} {cy} {h:x}");
         }
     }
+    Ok(sb)
+}
+
+/// Sandbox options at their defaults and after loading a save's map_sand.bin; pairs with SandboxProbe.java.
+pub fn sandbox(root: &Path, file: &Path) -> Result<String, String> {
+    use zomboid_engine::zombie::sandbox_options::{Kind, SandboxOptions};
+    let mut s = SandboxOptions::new();
+    let preset = std::fs::read_to_string(root.join("media/lua/shared/Sandbox/Apocalypse.lua"))
+        .map_err(|e| e.to_string())?;
+    s.load_game_file(&preset);
+    let mut sb = String::new();
+    let dump = |sb: &mut String, tag: &str, s: &SandboxOptions| {
+        for (i, d) in s.defs().iter().enumerate() {
+            let ty = match d.kind {
+                Kind::Boolean(_) => "boolean",
+                Kind::Double { .. } => "double",
+                Kind::Integer { .. } => "integer",
+                Kind::Enum { .. } => "enum",
+                Kind::Str { .. } => "string",
+            };
+            let _ = writeln!(sb, "{tag}\t{}\t{ty}\t{}", d.name, s.value_as_string(i));
+        }
+    };
+    dump(&mut sb, "D", &s);
+    s.load(&std::fs::read(file).map_err(|e| e.to_string())?)?;
+    for l in &s.log {
+        eprintln!("{l}");
+    }
+    dump(&mut sb, "L", &s);
+    let _ = writeln!(sb, "P\t{}", s.preset);
     Ok(sb)
 }

@@ -49,6 +49,7 @@ server_case() {
 want=${1:-all}
 sel() { [ "$want" = all ] || [ "$want" = "$1" ]; }
 sel tiledefs && run_case tiledefs TileDefsProbe
+sel sandbox && run_case sandbox SandboxProbe "$HERE/profile/Saves/Sandbox/2026-11-07_22-34-13/map_sand.bin"
 sel lotheaders && run_case lotheaders LotHeadersProbe "Muldraugh, KY"
 sel lotpack && run_case lotpack LotPackProbe "Muldraugh, KY" 30 43 34 47
 # the whole map (4.2 GB of lotpacks, minutes): sh tools/oracle.sh lotpack-all

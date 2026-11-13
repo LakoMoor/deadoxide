@@ -109,3 +109,16 @@ fn los_with_doors_flipped_matches_original() {
 fn stairs_match_original() {
     check("stairs", &["126", "181"]);
 }
+
+#[test]
+fn sandbox_matches_original() {
+    let save = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../profile/Saves/Sandbox/2026-11-07_22-34-13/map_sand.bin"
+    );
+    if !std::path::Path::new(save).exists() {
+        eprintln!("SKIPPED sandbox: the isolated profile's save is not present");
+        return;
+    }
+    check("sandbox", &[save]);
+}

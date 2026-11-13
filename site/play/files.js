@@ -16,6 +16,7 @@ export function needed(path, cx, cy) {
   if (/^media\/[^/]+\.tiles$/.test(lower)) return true;
   if (lower.startsWith("media/scripts/") && lower.endsWith(".txt") && !lower.includes("tempnotworking")) return true;
   if (/^media\/maps\/[^/]+\/map\.info$/.test(lower)) return true;
+  if (path === "media/lua/shared/Sandbox/Apocalypse.lua") return true;
   const map = `media/maps/${MAP}/`;
   if (path.startsWith(map)) {
     const name = path.slice(map.length);
