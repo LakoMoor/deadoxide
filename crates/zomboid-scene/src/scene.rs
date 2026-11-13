@@ -14,7 +14,9 @@ use zomboid_engine::vfs;
 use zomboid_engine::zombie::core::random::rand_abstract::RandAbstract;
 use zomboid_engine::zombie::iso::cell_loader::{self, LoadContext};
 use zomboid_engine::zombie::iso::iso_chunk::IsoChunk;
-use zomboid_engine::zombie::iso::iso_grid_square::{GetSquare, IsoGridSquare};
+use zomboid_engine::zombie::iso::iso_grid_square::{
+    line_clear, GetSquare, IsoGridSquare, TestResults,
+};
 use zomboid_engine::zombie::iso::iso_meta_grid::AlarmSettings;
 use zomboid_engine::zombie::iso::iso_object::ObjectKind;
 use zomboid_engine::zombie::iso::iso_world::IsoWorld;
@@ -301,12 +303,61 @@ pub struct SceneState {
     missing: u64,
 }
 
+impl SceneState {
+    fn chunk(&self, x: i32, y: i32) -> Option<usize> {
+        // Chunks were loaded cell by cell, 32 x 32 per cell, x outer and y inner.
+        let (x0, y0, _, y1) = self.bounds;
+        let (wx, wy) = (x.div_euclid(8), y.div_euclid(8));
+        let (cx, cy) = (wx.div_euclid(32) - x0, wy.div_euclid(32) - y0);
+        if cx < 0 || cy < 0 || cy > y1 - y0 {
+            return None;
+        }
+        let i = ((cx * (y1 - y0 + 1) + cy) * 1024 + wx.rem_euclid(32) * 32 + wy.rem_euclid(32))
+            as usize;
+        self.chunks
+            .get(i)
+            .filter(|c| c.wx == wx && c.wy == wy)
+            .map(|_| i)
+    }
+    fn square_mut(&mut self, x: i32, y: i32, z: i32) -> Option<&mut IsoGridSquare> {
+        let i = self.chunk(x, y)?;
+        self.chunks[i].get_grid_square_mut(x.rem_euclid(8), y.rem_euclid(8), z)
+    }
+}
+impl GetSquare for SceneState {
+    fn get_grid_square(&self, x: i32, y: i32, z: i32) -> Option<&IsoGridSquare> {
+        let i = self.chunk(x, y)?;
+        self.chunks[i].get_grid_square(x.rem_euclid(8), y.rem_euclid(8), z)
+    }
+}
+
 impl Scene {
+    /// zombie.iso.LosUtil.lineClear between two squares of one level, as a client computes it; a closed window or
+    /// door in the way counts as seen through only where the original says so. `false` without engine state.
+    pub fn line_clear(&self, from: (i32, i32), to: (i32, i32), z: i32) -> bool {
+        let Some(st) = &self.state else { return false };
+        line_clear(
+            &st.world.sprites,
+            &st.world.alias,
+            st,
+            from.0,
+            from.1,
+            z,
+            to.0,
+            to.1,
+            z,
+            false,
+            10000,
+            false,
+        ) != TestResults::Blocked
+    }
+
     /// Recompute instances and collision from the engine squares (after an object changed).
     pub fn rebuild(&mut self) {
-        let Some(state) = self.state.take() else {
+        let Some(mut state) = self.state.take() else {
             return;
         };
+        let pending;
         {
             let SceneState {
                 world,
@@ -319,6 +370,7 @@ impl Scene {
             let (zmin, zmax) = *levels;
             let missing = *missing;
             let atlas = &self.atlas;
+            let mut visions: Vec<(i32, i32, i32, i32)> = Vec::new();
 
             let mut collision = Collision::default();
             {
@@ -333,8 +385,9 @@ impl Scene {
                     }
                 }
                 for sq in grid.0.values() {
-                    let (c, _path, _vision) = sq.calculate_matrices(&world.alias, &grid);
+                    let (c, _path, vision) = sq.calculate_matrices(&world.alias, &grid);
                     collision.set_collide_matrix(sq.x, sq.y, sq.z, c);
+                    visions.push((sq.x, sq.y, sq.z, vision));
                     let mut mask = 0u16;
                     for dy in -1..=1 {
                         for dx in -1..=1 {
@@ -441,6 +494,13 @@ impl Scene {
             self.collision = collision;
             self.meta = meta;
             self.rooms = rooms;
+            pending = visions;
+        }
+        // zombie.iso.IsoGridSquare.visionMatrix, read by the ported line of sight.
+        for (x, y, z, v) in pending {
+            if let Some(sq) = state.square_mut(x, y, z) {
+                sq.vision_matrix = v;
+            }
         }
         self.state = Some(state);
     }
@@ -588,14 +648,20 @@ impl Scene {
                 .iter()
                 .any(|&(dx, dy)| matches!(self.rooms.get(&(x + dx, y + dy, zz)), Some(r) if set.contains(r)))
         };
-        // EXPERIMENT: squares within `radius` that the player has line of sight to (walls block; see `Collision::los`).
+        // Squares within `radius` the player has line of sight to: the ported LosUtil.lineClear (the radius itself
+        // and what the original does with the result when drawing are still approximations).
         let mut seen = std::collections::HashSet::new();
         if let Some(rad) = los {
             let r = rad.ceil() as i32;
             for x in (px.floor() as i32 - r)..=(px.floor() as i32 + r) {
                 for y in (py.floor() as i32 - r)..=(py.floor() as i32 + r) {
                     let (cx, cy) = (x as f32 + 0.5 - px, y as f32 + 0.5 - py);
-                    if cx * cx + cy * cy <= rad * rad && self.collision.los((px, py), (x, y), z) {
+                    let seen_sq = if self.state.is_some() {
+                        self.line_clear((px.floor() as i32, py.floor() as i32), (x, y), z)
+                    } else {
+                        self.collision.los((px, py), (x, y), z)
+                    };
+                    if cx * cx + cy * cy <= rad * rad && seen_sq {
                         seen.insert((x, y));
                     }
                 }
