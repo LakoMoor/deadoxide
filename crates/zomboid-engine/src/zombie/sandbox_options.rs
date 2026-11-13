@@ -143,7 +143,7 @@ impl SandboxOptions {
             _ => None,
         }
     }
-    /// zombie.config.ConfigOption.getValueAsString of option `i`.
+    /// zombie.config.DoubleConfigOption.getValueAsString (and its siblings) of option `i`.
     pub fn value_as_string(&self, i: usize) -> String {
         match &self.values[i] {
             Value::Boolean(b) => b.to_string(),
@@ -153,7 +153,7 @@ impl SandboxOptions {
         }
     }
 
-    /// zombie.config.*ConfigOption.parse for option `i`: an unparsable or out-of-range value is logged and the
+    /// zombie.config.IntegerConfigOption.parse (and the Boolean/Double/String ones) for option `i`: an unparsable or out-of-range value is logged and the
     /// option keeps its value.
     pub fn parse(&mut self, i: usize, s: &str) {
         let d = &OPTIONS[i];

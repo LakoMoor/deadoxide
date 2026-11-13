@@ -4,7 +4,7 @@ Source: decompiled `projectzomboid.jar` sha256 `e1a69eb743ede60b213a0fe7f8b83d4f
 A method counts as cited when a Rust doc comment names it. Citing is a pointer for reviewers, not proof of parity: evidence lives in docs/COMPATIBILITY.md.
 Method counts are distinct method names per top-level file (overloads and inner classes merged).
 
-**Total: 62 of 3424 classes touched, 290 of 46121 method names cited (0.6%), 962280 decompiled lines.**
+**Total: 63 of 3424 classes touched, 292 of 46121 method names cited (0.6%), 962280 decompiled lines.**
 
 | Package | Classes | Touched | Method names | Cited | Lines |
 |---|---:|---:|---:|---:|---:|
@@ -51,7 +51,7 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.seating | 3 | 0 | 79 | 0 (0.0%) | 1062 |
 | zombie.characterTextures | 4 | 0 | 36 | 0 (0.0%) | 1002 |
 | zombie.vehicleSound | 19 | 0 | 107 | 0 (0.0%) | 987 |
-| zombie.config | 8 | 1 | 101 | 0 (0.0%) | 965 |
+| zombie.config | 8 | 2 | 101 | 2 (2.0%) | 965 |
 | zombie.asset | 14 | 0 | 80 | 0 (0.0%) | 819 |
 | zombie.profanity | 6 | 0 | 53 | 0 (0.0%) | 783 |
 | zombie.spnetwork | 6 | 0 | 69 | 0 (0.0%) | 706 |
@@ -82,7 +82,8 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.basements.Basements | 9 / 28 | crates/zomboid-engine/src/zombie/basements/mod.rs |
 | zombie.basements.BasementsPerMap | 0 / 1 | crates/zomboid-engine/src/zombie/basements/mod.rs |
 | zombie.basements.BasementsV1 | 0 / 3 | crates/zomboid-engine/src/zombie/basements/mod.rs |
-| zombie.config.ConfigOption | 0 / 5 | crates/zomboid-engine/src/zombie/sandbox_options.rs |
+| zombie.config.DoubleConfigOption | 1 / 17 | crates/zomboid-engine/src/zombie/sandbox_options.rs |
+| zombie.config.IntegerConfigOption | 1 / 16 | crates/zomboid-engine/src/zombie/sandbox_options.rs |
 | zombie.core.TilePropertyAliasMap | 5 / 6 | crates/zomboid-engine/src/zombie/core/tile_property_alias_map.rs |
 | zombie.core.Translator | 1 / 41 | crates/zomboid-lua/src/text.rs |
 | zombie.core.math.PZMath | 13 / 68 | crates/zomboid-engine/src/zombie/core/math/pz_math.rs |
@@ -136,7 +137,3 @@ Method counts are distinct method names per top-level file (overloads and inner 
 | zombie.scripting.entity.components.spriteconfig.SpriteConfigScript | 4 / 52 | crates/zomboid-engine/src/zombie/scripting/sprite_config.rs |
 | zombie.scripting.objects.ScriptModule | 1 / 50 | crates/zomboid-engine/src/zombie/scripting/script_manager.rs |
 | zombie.util.StringUtils | 3 / 36 | crates/zomboid-engine/src/zombie/util/string_utils.rs |
-
-## Citations that match no decompiled class or method (fix the comment)
-
-- zombie.config (crates/zomboid-engine/src/zombie/sandbox_options.rs)
