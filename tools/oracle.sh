@@ -66,4 +66,18 @@ sel doortoggle && { cp tests/golden/engine/specialcollide.sha256 target/oracle/s
 sel los && server_case los LosProbe 129 182
 sel losdoors && { server_case los LosProbe 129 182 toggle; cp tests/golden/engine/los.sha256 tests/golden/engine/losdoors.sha256 2>/dev/null; server_case los LosProbe 129 182; }
 sel stairs && server_case stairs StairsProbe 126 181
+# mover: a character walked over two staircases; the Rust side is the scene crate's example, not pz-dump.
+mover_case() {
+  args="8118.5 11615.5 0 -0.1 45 8077.5 11612.5 -0.1 0 45"
+  javac -nowarn -encoding UTF-8 -cp "$ROOT/projectzomboid.jar" -d target/original-probe tests/original_probe/ServerHarness.java tests/original_probe/MoverProbe.java 2>target/oracle/mover.javac || { echo "FAIL mover (javac)"; fail=1; return; }
+  (cd "$ROOT" && java -Djava.awt.headless=true --enable-final-field-mutation=ALL-UNNAMED -Djava.library.path="$PZ_NATIVES" -Xmx4g -cp "$HERE/target/original-probe:projectzomboid.jar" MoverProbe "$HERE/target/oracle/pz-oracle-mover" 126 181 $args >"$HERE/target/oracle/mover.java.txt" 2>"$HERE/target/oracle/mover.java.err") || { echo "FAIL mover (server probe)"; fail=1; return; }
+  cargo run -q --release -p zomboid-scene --example mover_walk -- "$ROOT" 31 45 $args >target/oracle/mover.rust.txt 2>target/oracle/mover.rust.err || { echo "FAIL mover (rust)"; fail=1; return; }
+  if cmp -s target/oracle/mover.java.txt target/oracle/mover.rust.txt; then
+    cp target/oracle/mover.java.txt tests/golden/mover_stairs.txt
+    echo "OK   mover: $(wc -l <target/oracle/mover.java.txt | tr -d ' ') lines identical"
+  else
+    echo "FAIL mover: first differences:"; diff target/oracle/mover.java.txt target/oracle/mover.rust.txt | head -6; fail=1
+  fi
+}
+sel mover && mover_case
 exit $fail

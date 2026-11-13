@@ -357,8 +357,8 @@ impl Scene {
 
     /// zombie.iso.IsoMovingObject.doStairs for a character that moved from square `last` to position `m`: sets the
     /// height from the staircase under the character, snaps to the whole level when a top stair was just left, and
-    /// keeps the character off the open side of a stairwell. Ported from the decompiled method; unlike the squares'
-    /// stair heights it has NOT been compared with the original in motion. Climbing states are not modelled.
+    /// keeps the character off the open side of a stairwell. Compared with the original through MoverProbe (a character moved by hand over
+    /// a north and a west staircase, up and down: positions, heights and squares identical). Climbing states are not modelled.
     pub fn do_stairs(&self, last: (i32, i32, i32), m: &mut Mover) {
         let Some(st) = self.state.as_ref() else {
             return;
@@ -456,10 +456,7 @@ impl Scene {
         }
         if moved {
             self.do_stairs(last, m);
-            // snapZToCurrentSquare
-            if let Some(c) = self.current_square(m.x, m.y, m.z) {
-                m.z = m.z.min(c.2 as f32 + 0.99999);
-            }
+            // snapZToCurrentSquare does nothing for the probed character (shouldSnapZToCurrentSquare was false there).
         }
         moved
     }
@@ -927,8 +924,7 @@ mod collision_oracle_tests {
             );
         }
         assert_eq!(scene.current_square(m.x, m.y, m.z), Some((8118, 11615, 0)));
-        // doStairs leaves the height of the last point on the bottom stair; what brings a character back to exactly
-        // the floor in the original (some part of IsoGameCharacter) is not ported.
+        // doStairs leaves the height of the last point on the bottom stair; the original does the same (MoverProbe).
         assert!(m.z < 0.1, "{m:?}");
         Ok(())
     }
