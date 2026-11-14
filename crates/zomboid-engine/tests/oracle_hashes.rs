@@ -122,3 +122,16 @@ fn sandbox_matches_original() {
     }
     check("sandbox", &[save]);
 }
+
+#[test]
+fn items_match_original() {
+    // The field list tools/gen_item_params.py hands to both sides: the table's fields minus aimingMod.
+    let names: Vec<&str> = zomboid_engine::zombie::scripting::item_params_table::FIELDS
+        .iter()
+        .map(|f| f.name)
+        .filter(|n| *n != "aimingMod")
+        .collect();
+    let list = Path::new(env!("CARGO_TARGET_TMPDIR")).join("item_fields.txt");
+    std::fs::write(&list, names.join("\n") + "\n").expect("write field list");
+    check("items", &[list.to_str().expect("utf-8 path")]);
+}

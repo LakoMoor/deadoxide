@@ -31,6 +31,7 @@ fn main() {
         Some("chunkobjects") if a.len() == 7 => chunkobjects(Path::new(&a[2]), &a[3..7]),
         Some("collide") if a.len() == 7 => collide(Path::new(&a[2]), &a[3..7]),
         Some("entitysprites") if a.len() == 3 => entitysprites(Path::new(&a[2])),
+        Some("items") if a.len() == 4 => items(Path::new(&a[2]), Path::new(&a[3])),
         Some("sandbox") if a.len() == 4 => sandbox(Path::new(&a[2]), Path::new(&a[3])),
         Some("specialcollide") if a.len() == 5 || a.len() == 6 => {
             specialcollide(Path::new(&a[2]), &a[3..], false)
@@ -1141,5 +1142,44 @@ pub fn sandbox(root: &Path, file: &Path) -> Result<String, String> {
     }
     dump(&mut sb, "L", &s);
     let _ = writeln!(sb, "P\t{}", s.preset);
+    Ok(sb)
+}
+
+/// Item scripts, pairs with ItemsProbe.java: every loaded item sorted by full name, with the fields named in `fields`
+/// (one per line, from tools/gen_item_params.py); floats as raw bits, null as "null".
+pub fn items(root: &Path, fields: &Path) -> Result<String, String> {
+    use zomboid_engine::zombie::scripting::item::Value;
+    use zomboid_engine::zombie::scripting::script_manager::ScriptManager;
+    let names =
+        std::fs::read_to_string(fields).map_err(|e| format!("{}: {e}", fields.display()))?;
+    let names: Vec<&str> = names.lines().filter(|l| !l.is_empty()).collect();
+    let m = ScriptManager::load(root)?;
+    for (n, e) in &m.item_errors {
+        eprintln!("dropped {n}: {e}");
+    }
+    let mut items: Vec<_> = m.items.iter().collect();
+    // java.lang.String.compareTo: UTF-16 order; item names are ASCII.
+    items.sort_by_key(|i| i.full_name());
+    let mut sb = String::new();
+    for it in items {
+        sb.push_str(&it.full_name());
+        for n in &names {
+            let v = it.get(n).ok_or_else(|| format!("no field {n}"))?;
+            sb.push('\t');
+            match v {
+                Value::F32(f) => {
+                    let _ = write!(sb, "{:x}", f.to_bits());
+                }
+                Value::I32(i) => {
+                    let _ = write!(sb, "{i}");
+                }
+                Value::Bool(b) => {
+                    let _ = write!(sb, "{b}");
+                }
+                Value::Str(x) => sb.push_str(x.as_deref().unwrap_or("null")),
+            }
+        }
+        sb.push('\n');
+    }
     Ok(sb)
 }

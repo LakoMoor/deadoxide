@@ -3,9 +3,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use super::item::{Item, Value};
+use super::model_script::ModelScript;
 use super::script_parser::{self, Block};
 use super::sprite_config::SpriteConfigScript;
 use crate::java;
+use crate::zombie::core::translator::Translator;
+use crate::zombie::util::string_utils;
 
 /// zombie.scripting.entity.GameEntityScript, the ported part.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -35,6 +39,14 @@ pub struct ScriptManager {
     pub load_file_names: Vec<String>,
     /// zombie.scripting.ScriptManager.getAllGameEntities
     pub entities: Vec<GameEntityScript>,
+    /// Item scripts that loaded, in module then script-name order (the original's list order is not reproduced).
+    pub items: Vec<super::item::Item>,
+    /// Model scripts that loaded, per module (same order as `module_list`), in the order of the script names.
+    pub models: Vec<Vec<ModelScript>>,
+    /// zombie.core.Translator, which `Item.OnScriptsLoaded` asks for display names.
+    pub translator: Translator,
+    /// Items the original drops because their script failed to load: (full name, error).
+    pub item_errors: Vec<(String, String)>,
 }
 
 /// zombie.scripting.ScriptManager.searchFolders: every `.txt` below `fo`, as lower-case paths relative to the game
@@ -91,7 +103,10 @@ impl ScriptManager {
                 .then_with(|| a.0.encode_utf16().cmp(b.0.encode_utf16()))
         });
         game_files.dedup_by(|a, b| a.0 == b.0);
-        let mut m = ScriptManager::default();
+        let mut m = ScriptManager {
+            translator: Translator::load_files(root)?,
+            ..ScriptManager::default()
+        };
         for (rel, path) in game_files {
             // LoadFile: lines joined with '\n' (BufferedReader.readLine drops line terminators).
             let Ok(bytes) = crate::vfs::read(&path) else {
@@ -110,6 +125,13 @@ impl ScriptManager {
             m.parse_script(&script_parser::strip_comments(&buf));
         }
         m.load_entities();
+        m.load_models();
+        m.load_items();
+        m.on_items_loaded()?;
+        // ScriptManager.Load after loadScripts: ... ModelScript.ScriptsLoaded -> Item.resolveModelScripts.
+        for i in 0..m.items.len() {
+            m.resolve_model_scripts(i);
+        }
         Ok(m)
     }
 
@@ -192,14 +214,9 @@ impl ScriptManager {
                     sprite_config: None,
                 };
                 let mut ok = true;
-                for (index, body) in module.bodies[&("entity".to_string(), name.clone())]
-                    .iter()
-                    .enumerate()
-                {
-                    // ScriptType.Flags.ResetExisting: a later body (an override) starts from a reset script.
-                    if index >= 1 {
-                        script.sprite_config = None;
-                    }
+                // ScriptType.Flags.ResetExisting calls reset() before every later body, but GameEntityScript keeps
+                // BaseScriptObject's empty reset: a later body (an override) amends the script.
+                for body in &module.bodies[&("entity".to_string(), name.clone())] {
                     if !script.load(body) {
                         ok = false;
                         break;
@@ -217,6 +234,166 @@ impl ScriptManager {
             all.extend(order.into_iter().map(|i| loaded[i].clone()));
         }
         self.entities = all;
+    }
+}
+
+impl ScriptManager {
+    /// ScriptBucket.LoadScripts for the item buckets: every body of an item in file order, the script reset before
+    /// each later body (`ScriptType.Flags.ResetExisting`: a later file replaces the item rather than amending it).
+    /// A body that fails removes the item (`RemoveLoadError`); obsolete, disabled and debug-only items are left out.
+    fn load_items(&mut self) {
+        for module in &self.module_list {
+            let Some(names) = module.names.get("item") else {
+                continue;
+            };
+            let mut sorted: Vec<&String> = names.iter().collect();
+            sorted.sort();
+            for name in sorted {
+                let mut item = Item::new(&module.name, name);
+                let mut error = None;
+                // ResetExisting calls Item.reset(), which is BaseScriptObject's empty one: later bodies amend.
+                for body in &module.bodies[&("item".to_string(), name.clone())] {
+                    if let Err(e) = item.load(body) {
+                        error = Some(e);
+                        break;
+                    }
+                }
+                if let Some(e) = error {
+                    self.item_errors.push((item.full_name(), e));
+                    continue;
+                }
+                let obsolete = matches!(item.get("obsolete"), Some(Value::Bool(true)));
+                if !obsolete && item.enabled && !item.debug_only {
+                    self.items.push(item);
+                }
+            }
+        }
+    }
+}
+
+impl ScriptManager {
+    /// ScriptBucket.LoadScripts for the model buckets: every body in file order, `ModelScript.reset` before each later
+    /// one; a body that throws removes the script; disabled and debug-only models are left out.
+    fn load_models(&mut self) {
+        let mut all = Vec::with_capacity(self.module_list.len());
+        for module in &self.module_list {
+            let mut loaded = Vec::new();
+            for name in module.names.get("model").into_iter().flatten() {
+                let mut script = ModelScript::new(&module.name, name);
+                let mut ok = true;
+                for (index, body) in module.bodies[&("model".to_string(), name.clone())]
+                    .iter()
+                    .enumerate()
+                {
+                    if index >= 1 {
+                        script.reset();
+                    }
+                    if script.load(body).is_err() {
+                        ok = false;
+                        break;
+                    }
+                }
+                if ok && script.enabled && !script.debug_only {
+                    loaded.push(script);
+                }
+            }
+            all.push(loaded);
+        }
+        self.models = all;
+    }
+
+    /// zombie.scripting.objects.ScriptModule.getModelScript -> ScriptBucket.get: the module's own model, else one
+    /// from its imports (each import searched the same way; `seen` stops an import cycle, where the original would
+    /// overflow its stack).
+    fn module_model_script(
+        &self,
+        module: usize,
+        name: &str,
+        seen: &mut Vec<usize>,
+    ) -> Option<&ModelScript> {
+        if seen.contains(&module) {
+            return None;
+        }
+        seen.push(module);
+        if let Some(s) = self.models[module]
+            .iter()
+            .find(|s| s.script_object_name == name)
+        {
+            return Some(s);
+        }
+        for import in &self.module_list[module].imports {
+            // ScriptManager.getModule(name): the first module with that name.
+            let Some(m) = self.module_list.iter().position(|x| &x.name == import) else {
+                continue;
+            };
+            if let Some(s) = self.module_model_script(m, name, seen) {
+                return Some(s);
+            }
+        }
+        None
+    }
+
+    /// zombie.scripting.ScriptManager.resolveModelScript: `None` for a blank name, a dotted name unchanged, else the
+    /// full type of the model found in the item's module, then in any other module, else `???.name`.
+    pub fn resolve_model_script(
+        &self,
+        module: usize,
+        model_script_name: Option<&str>,
+    ) -> Option<String> {
+        let name = model_script_name?;
+        if string_utils::is_null_or_whitespace(Some(name)) {
+            return None;
+        }
+        if name.contains('.') {
+            return Some(name.to_string());
+        }
+        if let Some(s) = self.module_model_script(module, name, &mut Vec::new()) {
+            return Some(s.get_full_type());
+        }
+        for other in 0..self.module_list.len() {
+            if other != module {
+                if let Some(s) = self.module_model_script(other, name, &mut Vec::new()) {
+                    return Some(s.get_full_type());
+                }
+            }
+        }
+        Some(format!("???.{name}"))
+    }
+
+    /// zombie.scripting.objects.Item.resolveModelScripts for `items[index]`.
+    fn resolve_model_scripts(&mut self, index: usize) {
+        let item = &self.items[index];
+        let Some(module) = self.module_list.iter().position(|m| m.name == item.module) else {
+            return;
+        };
+        let text = |f: &str| match item.get(f) {
+            Some(Value::Str(s)) => s.clone(),
+            _ => None,
+        };
+        let (s, w) = (text("staticModel"), text("worldStaticModel"));
+        let s = self.resolve_model_script(module, s.as_deref());
+        let w = self.resolve_model_script(module, w.as_deref());
+        let item = &mut self.items[index];
+        item.set("staticModel", Value::Str(s));
+        item.set("worldStaticModel", Value::Str(w));
+    }
+
+    /// zombie.scripting.objects.Item.OnScriptsLoaded, the ported part: the display name becomes
+    /// `Translator.getItemNameFromFullType(fullName)`.
+    fn on_items_loaded(&mut self) -> Result<(), String> {
+        for item in &mut self.items {
+            let full = item.full_name();
+            let own = match item.get("displayName") {
+                Some(Value::Str(Some(s))) if !s.is_empty() => s.clone(),
+                _ => full.clone(),
+            };
+            // getItem(fullType) finds this item: its getDisplayName() (the full name when it has none).
+            let name = self
+                .translator
+                .get_item_name_from_full_type(&full, Some(own))?;
+            item.set("displayName", Value::Str(Some(name)));
+        }
+        Ok(())
     }
 }
 
