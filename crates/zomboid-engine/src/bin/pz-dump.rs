@@ -1255,13 +1255,19 @@ mod save_dump {
 
     use zomboid_engine::se::krka::kahlua::j2se::kahlua_table_impl::{KahluaTable, LuaValue};
     use zomboid_engine::zombie::core::skinnedmodel::visual::human_visual::HumanVisual;
+    use zomboid_engine::zombie::inventory::inventory_item::{InventoryItem, ItemKind, ItemType};
     use zomboid_engine::zombie::inventory::item_container::ItemContainer;
+    use zomboid_engine::zombie::inventory::types::alarm_clock::AlarmClockSave;
+    use zomboid_engine::zombie::inventory::types::clothing::ClothingSave;
+    use zomboid_engine::zombie::inventory::types::moveable::MoveableSave;
     use zomboid_engine::zombie::iso::chunk_save::{ClassSave, ObjectSave};
     use zomboid_engine::zombie::iso::iso_chunk::IsoChunk;
     use zomboid_engine::zombie::iso::iso_grid_square::IsoGridSquare;
     use zomboid_engine::zombie::iso::iso_object::{IsoObject, ObjectKind};
     use zomboid_engine::zombie::iso::objects::iso_dead_body::IsoDeadBody;
     use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::{IsoSpriteManager, SpriteRef};
+    use zomboid_engine::zombie::world::dictionary_data::DictionaryData;
+    use zomboid_engine::zombie::world_map::symbols::world_map_symbols::WorldMapSymbol;
 
     /// `Integer.toHexString(Float.floatToRawIntBits(f))`
     pub fn fh(f: f32) -> String {
@@ -1368,7 +1374,7 @@ mod save_dump {
             sb.push('\n');
         }
     }
-    fn container(sb: &mut String, c: &ItemContainer) {
+    fn container(sb: &mut String, dict: &DictionaryData, c: &ItemContainer) {
         let _ = write!(
             sb,
             "C\t{}\t{}\t{}\t{}",
@@ -1381,11 +1387,354 @@ mod save_dump {
             let _ = write!(sb, "\t{}:{}", it.full_type, it.id);
         }
         sb.push('\n');
+        for it in &c.items {
+            item(sb, dict, it);
+        }
+    }
+
+    /// `o == null ? "null" : "s:" + o`
+    fn st(v: Option<&str>) -> String {
+        v.map_or("null".to_string(), |v| format!("s:{v}"))
+    }
+    /// java.util.List.toString
+    fn list(v: Option<&[String]>) -> String {
+        v.map_or("null".to_string(), |v| format!("[{}]", v.join(", ")))
+    }
+
+    /// The I and J lines ChunkSaveProbe.java prints for an item (and its bag's contents).
+    pub fn item(sb: &mut String, dict: &DictionaryData, it: &InventoryItem) {
+        let cls = it.item_type.class_name().unwrap_or("?");
+        let tinted = matches!(
+            it.item_type,
+            ItemType::Clothing | ItemType::AlarmClockClothing | ItemType::Container
+        );
+        let moveable = matches!(it.item_type, ItemType::Moveable | ItemType::Radio);
+        let names: Vec<String> = it
+            .extra_items
+            .iter()
+            .map(|id| {
+                dict.items
+                    .get(id)
+                    .map_or("null".to_string(), |i| i.full_type.clone())
+            })
+            .collect();
+        let extra = format!("[{}]", names.join(", "));
+        let _ = write!(
+            sb,
+            "I\t{}:{}\t{cls}\t{}\t{}/{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{extra}\t{}\t{}\t{}\t{},{}\t{},{},{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{},{},{}\t{}\t{}",
+            it.full_type,
+            it.id,
+            it.uses,
+            it.condition,
+            it.condition_max,
+            b(it.custom_color),
+            if tinted { "~".to_string() } else { it.col.map(fh).join(",") },
+            fh(it.item_capacity),
+            b(it.activated),
+            it.have_been_repaired,
+            if moveable || it.recorded_media_id.is_some() {
+                "~".to_string()
+            } else {
+                it.name.as_deref().map_or("=".to_string(), |n| format!("s:{n}"))
+            },
+            it.byte_data.as_ref().map_or("-".to_string(), |d| d.len().to_string()),
+            b(it.custom_name),
+            if moveable { "~".to_string() } else { it.custom_weight.map_or("-".to_string(), fh) },
+            it.key_id,
+            it.remote_control_id,
+            it.remote_range,
+            fh(it.color_red),
+            fh(it.color_green),
+            fh(it.color_blue),
+            st(it.worker.as_deref()),
+            fh(it.wet_cooldown),
+            b(it.favorite),
+            st(it.stash_map.as_deref()),
+            b(it.zombie_infected),
+            it.current_ammo_count,
+            it.attached_slot,
+            st(it.attached_slot_type.as_deref()),
+            st(it.attached_to_model.as_deref()),
+            it.max_capacity,
+            it.recorded_media_id.as_deref().map_or(it.recorded_media_index.to_string(), |id| format!(
+                "{}={id}",
+                it.recorded_media_index
+            )),
+            fh(it.world_x_rotation),
+            fh(it.world_y_rotation),
+            fh(it.world_z_rotation),
+            fh(it.world_scale),
+            b(it.is_initialised)
+        );
+        let _ = writeln!(
+            sb,
+            "\t{}\t{}",
+            mod_data(it.table.as_ref()),
+            it.custom_name_entry.as_ref().map_or("-".to_string(), |n| {
+                if moveable {
+                    "~".to_string()
+                } else {
+                    n.as_deref().map_or("=".to_string(), |n| format!("s:{n}"))
+                }
+            })
+        );
+        let mut x = String::from("J");
+        match &it.kind {
+            ItemKind::Plain => {}
+            ItemKind::Key(k) => {
+                let _ = write!(x, "\t{}", k.number_of_key);
+            }
+            ItemKind::AlarmClock(a) => alarm(&mut x, a),
+            ItemKind::Clothing(c, a) => {
+                clothing(&mut x, c);
+                if let Some(a) = a {
+                    alarm(&mut x, a);
+                }
+            }
+            ItemKind::Container(c) => {
+                let _ = write!(x, "\t{}", c.weight_reduction);
+            }
+            ItemKind::Food(f) => {
+                let la = if f.last_aged == -1.0 {
+                    "W".to_string()
+                } else {
+                    fh(f.last_aged)
+                };
+                let _ = write!(x, "\t{}\t{la}", fh(f.age));
+                for v in [
+                    f.calories,
+                    f.proteins,
+                    f.lipids,
+                    f.carbohydrates,
+                    f.hung_change,
+                    f.base_hunger,
+                    f.unhappy_change,
+                    f.boredom_change,
+                    f.thirst_change,
+                    f.heat,
+                ] {
+                    let _ = write!(x, "\t{}", fh(v));
+                }
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                    f.last_cook_minute,
+                    fh(f.cooking_time),
+                    b(f.cooked),
+                    b(f.burnt),
+                    b(f.is_cookable),
+                    b(f.dangerous_uncooked),
+                    f.poison_detection_level,
+                    list(f.spices.as_deref()),
+                    f.poison_power,
+                    st(f.chef.as_deref()),
+                    f.off_age,
+                    f.off_age_max,
+                    fh(f.pain_reduction),
+                    f.flu_reduction,
+                    f.food_sickness_change,
+                    b(f.poison),
+                    f.use_for_poison,
+                    fh(f.freezing_time),
+                    b(f.frozen),
+                    fh(f.last_frozen_update),
+                    fh(f.rotten_time),
+                    fh(f.compost_time),
+                    b(f.cooked_in_microwave),
+                    fh(f.fatigue_change),
+                    fh(f.end_change),
+                    f.milk.as_ref().map_or(0, |m| m.0),
+                    st(f.milk.as_ref().map(|m| m.1.as_str())),
+                    fh(f.stress_change)
+                );
+            }
+            ItemKind::Literature(l) => {
+                let pages = l.custom_pages.as_ref().map_or(String::new(), |p| {
+                    p.iter()
+                        .enumerate()
+                        .map(|(i, t)| format!("{}={t}", i + 1))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                });
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{}\t{{{pages}}}\t{}\t{}",
+                    l.number_of_pages,
+                    l.already_read_pages,
+                    b(l.can_be_write),
+                    st(l.locked_by.as_deref()),
+                    list(l.learned_recipes.as_deref())
+                );
+            }
+            ItemKind::Weapon(w) => {
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t",
+                    fh(w.max_range),
+                    fh(w.min_range_ranged),
+                    w.clip_size,
+                    fh(w.min_damage),
+                    fh(w.max_damage),
+                    w.recoil_delay,
+                    w.aiming_time,
+                    w.reload_time,
+                    w.hit_chance,
+                    fh(w.min_angle),
+                    w.explosion_timer,
+                    fh(w.max_angle),
+                    fh(w.blood_level),
+                    b(w.is_jammed)
+                );
+                for p in &w.parts {
+                    let _ = write!(x, "{p};");
+                }
+            }
+            ItemKind::Moveable(m) => moveable_fields(&mut x, m),
+            ItemKind::Radio(m, r) => {
+                moveable_fields(&mut x, m);
+                let d = r.device_data.clone().unwrap_or_default();
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                    d.device_name,
+                    b(d.two_way),
+                    d.transmit_range,
+                    d.mic_range,
+                    b(d.mic_is_muted),
+                    fh(d.base_volume_range),
+                    fh(d.device_volume),
+                    b(d.is_portable),
+                    b(d.is_television),
+                    b(d.is_high_tier),
+                    b(d.is_turned_on),
+                    d.channel,
+                    d.min_channel_range,
+                    d.max_channel_range,
+                    b(d.is_battery_powered),
+                    b(d.has_battery),
+                    fh(d.power_delta),
+                    fh(d.use_delta),
+                    d.headphone_type,
+                    d.media_index,
+                    d.media_type,
+                    s(d.media_item.as_deref()),
+                    b(d.no_transmit)
+                );
+            }
+            ItemKind::Map(m) => {
+                let _ = write!(x, "\t{}", st(Some(&m.map_id)));
+                for sy in &m.symbols.symbols {
+                    let (name, base) = match sy {
+                        WorldMapSymbol::Text { base, .. } => ("WorldMapTextSymbol", base),
+                        WorldMapSymbol::Texture { base, .. } => ("WorldMapTextureSymbol", base),
+                    };
+                    let _ = write!(x, "\t{name}");
+                    for v in [
+                        base.x,
+                        base.y,
+                        base.anchor_x,
+                        base.anchor_y,
+                        base.scale,
+                        base.rotation,
+                        base.r,
+                        base.g,
+                        base.b,
+                        base.a,
+                    ] {
+                        let _ = write!(x, ",{}", fh(v));
+                    }
+                    let _ = write!(
+                        x,
+                        ",{}{}{},{},{}",
+                        b(base.collide),
+                        b(base.match_perspective),
+                        b(base.apply_zoom),
+                        fh(base.min_zoom.unwrap_or(0.0)),
+                        fh(base.max_zoom.unwrap_or(24.0))
+                    );
+                    match sy {
+                        WorldMapSymbol::Text {
+                            text,
+                            translated,
+                            layer_id,
+                            ..
+                        } => {
+                            let _ = write!(
+                                x,
+                                ",s:{text},{},{}",
+                                b(*translated),
+                                layer_id.as_deref().unwrap_or("text-note")
+                            );
+                        }
+                        WorldMapSymbol::Texture { symbol_id, .. } => {
+                            let _ = write!(x, ",s:{symbol_id}");
+                        }
+                    }
+                }
+            }
+        }
+        if x.len() > 1 {
+            sb.push_str(&x);
+            sb.push('\n');
+        }
+        if let ItemKind::Container(c) = &it.kind {
+            container(sb, dict, &c.container);
+        }
+    }
+
+    fn alarm(x: &mut String, a: &AlarmClockSave) {
+        let _ = write!(
+            x,
+            "\t{}\t{}\t{}\t{}\t{}",
+            a.alarm_hour,
+            a.alarm_minutes,
+            b(a.alarm_set),
+            dh(f64::from(a.ring_since)),
+            a.force_dont_ring
+        );
+    }
+
+    fn clothing(x: &mut String, c: &ClothingSave) {
+        let _ = write!(x, "\t{}\t", fh(c.wetness));
+        for (k, p) in c.patches.iter().flatten() {
+            let _ = write!(
+                x,
+                "{k}:{}/{}/{}/{}/{}/{};",
+                p.tailor_lvl,
+                p.fabric_type,
+                p.scratch_defense,
+                p.bite_defense,
+                b(p.has_hole),
+                p.condition_gain
+            );
+        }
+    }
+
+    fn moveable_fields(x: &mut String, m: &MoveableSave) {
+        let _ = write!(
+            x,
+            "\t{}\t{}",
+            st(Some(&m.world_sprite)),
+            b(m.light.is_some())
+        );
+        if let Some(l) = &m.light {
+            let _ = write!(
+                x,
+                "\t{}\t{}\t{}",
+                b(l.use_battery),
+                b(l.has_battery),
+                st(Some(l.bulb_item.as_deref().unwrap_or("Base.LightBulb")))
+            );
+            for v in [l.power, l.delta, l.r, l.g, l.b] {
+                let _ = write!(x, "\t{}", fh(v));
+            }
+        }
     }
 
     fn object(
         sb: &mut String,
         sm: &IsoSpriteManager,
+        dict: &DictionaryData,
         sq: &IsoGridSquare,
         index: usize,
         o: &IsoObject,
@@ -1447,7 +1796,7 @@ mod save_dump {
             let _ = writeln!(sb, "W\t{}", sn(sm, w.sprite));
         }
         for c in &os.containers {
-            container(sb, c);
+            container(sb, dict, c);
         }
         let mut x = String::from("X");
         match (&o.kind, &os.class) {
@@ -1710,9 +2059,14 @@ mod save_dump {
         if let ClassSave::Mannequin(m) = &os.class {
             human_visual(sb, &m.human_visual);
         }
+        if let ClassSave::WorldInventory(w) = &os.class {
+            if let Some(i) = &w.item {
+                item(sb, dict, i);
+            }
+        }
     }
 
-    fn corpse(sb: &mut String, d: &IsoDeadBody) {
+    fn corpse(sb: &mut String, dict: &DictionaryData, d: &IsoDeadBody) {
         let _ = write!(
             sb,
             "D\t{},{},{}\t{}{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
@@ -1759,12 +2113,12 @@ mod save_dump {
         }
         human_visual(sb, &d.human_visual);
         if let Some(c) = &d.container {
-            container(sb, c);
+            container(sb, dict, c);
         }
     }
 
     /// The text ChunkSaveProbe.java prints for one loaded chunk.
-    pub fn chunk(sb: &mut String, sm: &IsoSpriteManager, ch: &IsoChunk) {
+    pub fn chunk(sb: &mut String, sm: &IsoSpriteManager, dict: &DictionaryData, ch: &IsoChunk) {
         let Some(c) = ch.save.as_deref() else { return };
         let _ = write!(
             sb,
@@ -1864,10 +2218,10 @@ mod save_dump {
                 }
                 let _ = writeln!(sb, "\t{}", mod_data(ss.mod_data.as_ref()));
                 for (oi, o) in sq.objects.iter().enumerate() {
-                    object(sb, sm, sq, oi, o);
+                    object(sb, sm, dict, sq, oi, o);
                 }
                 for d in &ss.static_moving_objects {
-                    corpse(sb, d);
+                    corpse(sb, dict, d);
                 }
             }
         }
@@ -1878,19 +2232,31 @@ mod save_dump {
 /// runs (seeded basements merged into the meta grid); pairs with ChunkSaveProbe.java.
 pub fn chunksave(root: &Path, save: &Path) -> Result<String, String> {
     use zomboid_engine::zombie::basements::Basements;
-    use zomboid_engine::zombie::inventory::inventory_item::ItemFactory;
+    use zomboid_engine::zombie::inventory::inventory_item::{ItemFactory, ItemTemplate, ItemType};
     use zomboid_engine::zombie::iso::chunk_save::SaveLoadContext;
+    use zomboid_engine::zombie::radio::media::recorded_media::RecordedMedia;
     use zomboid_engine::zombie::scripting::item::Value;
     use zomboid_engine::zombie::scripting::script_manager::ScriptManager;
     use zomboid_engine::zombie::world::dictionary_data::DictionaryData;
 
+    /// What the factory needs from an item script: obsolete, ItemType (`None` when unknown) and conditionMax.
+    struct ScriptInfo {
+        obsolete: bool,
+        item_type: Option<ItemType>,
+        condition_max: i32,
+        hunger_change: f32,
+    }
     /// InventoryItemFactory.CreateItem(short): a valid dictionary entry whose item script exists.
     struct Factory<'a> {
         dictionary: &'a DictionaryData,
-        scripts: std::collections::HashMap<String, bool>,
+        scripts: std::collections::HashMap<String, ScriptInfo>,
+        recorded_media: RecordedMedia,
+        /// The `RecMedia["<id>"]` keys of media/lua/shared/RecordedMedia/recorded_media.lua, which the Lua
+        /// `OnInitRecordedMedia` handler registers.
+        media_ids: std::collections::HashSet<String>,
     }
     impl ItemFactory for Factory<'_> {
-        fn create_item(&self, registry_id: i16) -> Option<String> {
+        fn create_item(&self, registry_id: i16) -> Option<ItemTemplate> {
             let info = self.dictionary.items.get(&registry_id)?;
             if info.obsolete || info.removed {
                 return None;
@@ -1900,12 +2266,26 @@ pub fn chunksave(root: &Path, save: &Path) -> Result<String, String> {
             } else {
                 info.full_type.as_str()
             };
-            self.scripts
-                .contains_key(script)
-                .then(|| info.full_type.clone())
+            let si = self.scripts.get(script)?;
+            Some(ItemTemplate {
+                full_type: info.full_type.clone(),
+                item_type: si.item_type?,
+                condition_max: si.condition_max,
+                // Item.InstanceItem: food.setBaseHunger(this.hungerChange / 100.0F)
+                base_hunger: if si.item_type == Some(ItemType::Food) {
+                    si.hunger_change / 100.0
+                } else {
+                    0.0
+                },
+            })
         }
         fn is_obsolete(&self, full_type: &str) -> bool {
-            self.scripts.get(full_type).copied().unwrap_or(false)
+            self.scripts.get(full_type).is_some_and(|s| s.obsolete)
+        }
+        fn media_data_from_index(&self, index: i16) -> Option<String> {
+            self.recorded_media
+                .get_media_data_from_index(index, &|id| self.media_ids.contains(id))
+                .map(str::to_string)
         }
     }
 
@@ -1933,15 +2313,51 @@ pub fn chunksave(root: &Path, save: &Path) -> Result<String, String> {
         &std::fs::read(&dict_path).map_err(|e| format!("{}: {e}", dict_path.display()))?,
     )?;
     let scripts = ScriptManager::load(root)?;
+    let media_path = save.join("recorded_media.bin");
+    let recorded_media = RecordedMedia::load(
+        &std::fs::read(&media_path).map_err(|e| format!("{}: {e}", media_path.display()))?,
+    )?;
+    let lua_path = media.join("lua/shared/RecordedMedia/recorded_media.lua");
+    let media_ids = std::fs::read_to_string(&lua_path)
+        .map_err(|e| format!("{}: {e}", lua_path.display()))?
+        .lines()
+        .filter_map(|l| {
+            l.strip_prefix("RecMedia[\"")?
+                .split('"')
+                .next()
+                .map(str::to_string)
+        })
+        .collect();
     let factory = Factory {
+        recorded_media,
+        media_ids,
         dictionary: &dictionary,
         scripts: scripts
             .items
             .iter()
             .map(|i| {
+                let item_type = i
+                    .unported
+                    .iter()
+                    .rev()
+                    .find(|(k, _)| k == "itemtype")
+                    .and_then(|(_, v)| ItemType::from_script(java::trim(v)));
+                let condition_max = match i.get("conditionMax") {
+                    Some(Value::I32(v)) => *v,
+                    _ => 10,
+                };
+                let hunger_change = match i.get("hungerChange") {
+                    Some(Value::F32(v)) => *v,
+                    _ => 0.0,
+                };
                 (
                     i.full_name(),
-                    matches!(i.get("obsolete"), Some(Value::Bool(true))),
+                    ScriptInfo {
+                        obsolete: matches!(i.get("obsolete"), Some(Value::Bool(true))),
+                        item_type,
+                        condition_max,
+                        hunger_change,
+                    },
                 )
             })
             .collect(),
@@ -1985,7 +2401,7 @@ pub fn chunksave(root: &Path, save: &Path) -> Result<String, String> {
             has_lot_header,
         };
         match IsoChunk::load_from_disk_or_buffer(&data, wx, wy, &mut ctx) {
-            Ok(ch) => save_dump::chunk(&mut sb, ctx.sprites, &ch),
+            Ok(ch) => save_dump::chunk(&mut sb, ctx.sprites, &dictionary, &ch),
             Err(e) => {
                 let _ = writeln!(sb, "K\t{wx}\t{wy}\tFAIL\t{e}");
             }

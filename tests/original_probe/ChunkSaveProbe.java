@@ -25,8 +25,9 @@ import zombie.iso.sprite.IsoSpriteInstance;
 // reads every map/<wx>/<wy>.bin of a save; then the chunk, square, object, container and corpse state is printed.
 // The save's WorldDictionary.bin must equal the fresh server's (vanilla items, no mods). World-item removal and the
 // blood-splat lifespan are switched off so that the result does not depend on the world age. Items print as their
-// registry entry (WorldDictionary type) and id: the item contents (InventoryItem.load and the subclass loads, e.g. a
-// Moveable taking its world sprite as type) are not compared yet.
+// registry entry (WorldDictionary type) and id (a Moveable takes its world sprite as type), then one I line per item
+// with the state its load sets and a J line with the subclass part; a bag's contents follow it. The save's
+// recorded_media.bin is loaded first, and the clock is set to a distinctive world age (see below).
 //   ChunkSaveProbe <scratch> <save dir>
 public class ChunkSaveProbe {
     static Object g(Object o, String name) throws Exception {
@@ -95,6 +96,147 @@ public class ChunkSaveProbe {
             sb.append('\t').append(zombie.world.WorldDictionary.getItemTypeFromID(it.getRegistry_id())).append(':').append(it.getID());
         }
         sb.append('\n');
+        for (int i = 0; i < c.getItems().size(); i++) item(sb, c.getItems().get(i));
+    }
+
+    static String str(Object o) { return o == null ? "null" : "s:" + o; }
+    static String flt(Object o) { return fh(o); }
+
+    // One item after InventoryItem.load and its subclass load: the state the save sets or load resets to constants.
+    // Not printed: what the item keeps from its script or that synchWithVisual recomputes (see docs/PORT.md E21).
+    static void item(StringBuilder sb, InventoryItem it) throws Exception {
+        String cls = it.getClass().getSimpleName();
+        boolean tinted = it instanceof zombie.inventory.types.Clothing || it instanceof zombie.inventory.types.InventoryContainer;
+        boolean moveable = it instanceof zombie.inventory.types.Moveable;
+        zombie.core.Color col = (zombie.core.Color) g(it, "col");
+        Object name = g(it, "name"), orig = g(it, "originalName");
+        java.nio.ByteBuffer bd = (java.nio.ByteBuffer) g(it, "byteData");
+        List<?> extra = (List<?>) g(it, "extraItems");
+        sb.append("I\t").append(zombie.world.WorldDictionary.getItemTypeFromID(it.getRegistry_id())).append(':').append(it.getID()).append('\t').append(cls)
+            .append('\t').append(g(it, "uses")).append('\t').append(g(it, "condition")).append('/').append(g(it, "conditionMax")).append('\t')
+            .append(b(g(it, "customColor"))).append('\t').append(tinted ? "~" : fh(col.r) + "," + fh(col.g) + "," + fh(col.b) + "," + fh(col.a)).append('\t')
+            .append(flt(g(it, "itemCapacity"))).append('\t').append(b(g(it, "activated"))).append('\t').append(g(it, "haveBeenRepaired")).append('\t')
+            .append(moveable || (Short) g(it, "recordedMediaIndex") >= 0 ? "~" : name != null && name.equals(orig) ? "=" : str(name)).append('\t').append(bd == null ? "-" : String.valueOf(bd.limit())).append('\t')
+            .append(extra == null ? "-" : String.valueOf(extra)).append('\t').append(b(g(it, "customName"))).append('\t')
+            .append(moveable ? "~" : (Boolean) g(it, "customWeight") ? flt(g(it, "actualWeight")) : "-").append('\t').append(g(it, "keyId")).append('\t')
+            .append(g(it, "remoteControlId")).append(',').append(g(it, "remoteRange")).append('\t').append(flt(g(it, "colorRed"))).append(',')
+            .append(flt(g(it, "colorGreen"))).append(',').append(flt(g(it, "colorBlue"))).append('\t').append(str(g(it, "worker"))).append('\t')
+            .append(flt(g(it, "wetCooldown"))).append('\t').append(b(g(it, "favorite"))).append('\t').append(str(g(it, "stashMap"))).append('\t')
+            .append(b(g(it, "zombieInfected"))).append('\t').append(g(it, "currentAmmoCount")).append('\t').append(g(it, "attachedSlot")).append('\t')
+            .append(str(g(it, "attachedSlotType"))).append('\t').append(str(g(it, "attachedToModel"))).append('\t').append(g(it, "maxCapacity")).append('\t')
+            .append(media((Short) g(it, "recordedMediaIndex"))).append('\t').append(flt(g(it, "worldXRotation"))).append(',').append(flt(g(it, "worldYRotation"))).append(',')
+            .append(flt(g(it, "worldZRotation"))).append('\t').append(flt(g(it, "worldScale"))).append('\t').append(b(g(it, "isInitialised")));
+        KahluaTable t = (KahluaTable) g(it, "table");
+        List<String> l = new ArrayList<>();
+        Object cn = null;
+        if (t != null) {
+            KahluaTableIterator ti = t.iterator();
+            while (ti.advance()) {
+                if ("customName".equals(ti.getKey())) cn = ti.getValue();
+                else l.add(lua(ti.getKey()) + "=" + lua(ti.getValue()));
+            }
+        }
+        Collections.sort(l);
+        sb.append('\t').append(l.isEmpty() ? "-" : "{" + String.join(",", l) + "}").append('\t').append(cn == null ? "-" : moveable ? "~" : cn.equals(orig) ? "=" : "s:" + cn).append('\n');
+        StringBuilder x = new StringBuilder("J");
+        switch (cls) {
+            case "Key" -> x.append('\t').append(g(it, "numberOfKey"));
+            case "AlarmClock", "AlarmClockClothing" -> {
+                if (cls.equals("AlarmClockClothing")) clothing(x, it);
+                x.append('\t').append(g(it, "alarmHour")).append('\t').append(g(it, "alarmMinutes")).append('\t').append(b(g(it, "alarmSet"))).append('\t')
+                    .append(dh((Double) g(it, "ringSince"))).append('\t').append(g(it, "forceDontRing"));
+            }
+            case "Clothing" -> clothing(x, it);
+            case "InventoryContainer" -> x.append('\t').append(g(it, "weightReduction"));
+            case "Food" -> {
+                Object la = g(it, "lastAged");
+                x.append('\t').append(flt(g(it, "age"))).append('\t').append((Float) la == (float) zombie.GameTime.getInstance().getWorldAgeHours() ? "W" : flt(la));
+                for (String n : new String[]{"calories", "proteins", "lipids", "carbohydrates", "hungChange", "baseHunger", "unhappyChange", "boredomChange",
+                    "thirstChange", "heat", "lastCookMinute", "cookingTime", "cooked", "burnt", "isCookable", "dangerousUncooked", "poisonDetectionLevel", "spices",
+                    "poisonPower", "chef", "offAge", "offAgeMax", "painReduction", "fluReduction", "foodSicknessChange", "poison", "useForPoison", "freezingTime",
+                    "frozen", "lastFrozenUpdate", "rottenTime", "compostTime", "cookedInMicrowave", "fatigueChange", "endChange", "milkQty", "milkType",
+                    "stressChange"}) {
+                    Object v = g(it, n);
+                    x.append('\t').append(v instanceof Float ? flt(v) : v instanceof Boolean ? b(v) : v instanceof String ? str(v) : String.valueOf(v));
+                }
+            }
+            case "Literature" -> {
+                x.append('\t').append(g(it, "numberOfPages")).append('\t').append(g(it, "alreadyReadPages")).append('\t').append(b(g(it, "canBeWrite"))).append('\t')
+                    .append(new TreeMap<>((java.util.Map<?, ?>) java.util.Objects.requireNonNullElse(g(it, "customPages"), new java.util.HashMap<>()))).append('\t')
+                    .append(str(g(it, "lockedBy"))).append('\t').append(g(it, "learnedRecipes"));
+            }
+            case "HandWeapon" -> {
+                for (String n : new String[]{"maxRange", "minRangeRanged", "clipSize", "minDamage", "maxDamage", "recoilDelay", "aimingTime", "reloadTime",
+                    "hitChance", "minAngle", "explosionTimer", "maxAngle", "bloodLevel", "isJammed"}) {
+                    Object v = g(it, n);
+                    x.append('\t').append(v instanceof Float ? flt(v) : v instanceof Boolean ? b(v) : String.valueOf(v));
+                }
+                x.append('\t');
+                for (Object p : (List<?>) g(it, "attachmentList")) x.append(((InventoryItem) p).getFullType()).append(';');
+            }
+            case "Moveable", "Radio" -> {
+                x.append('\t').append(str(g(it, "worldSprite"))).append('\t').append(b(g(it, "isLight")));
+                if ((Boolean) g(it, "isLight")) {
+                    x.append('\t').append(b(g(it, "lightUseBattery"))).append('\t').append(b(g(it, "lightHasBattery"))).append('\t').append(str(g(it, "lightBulbItem")));
+                    for (String n : new String[]{"lightPower", "lightDelta", "lightR", "lightG", "lightB"}) x.append('\t').append(flt(g(it, n)));
+                }
+                if (cls.equals("Radio")) {
+                    Object d = g(it, "deviceData");
+                    x.append('\t').append(s(g(d, "deviceName")));
+                    for (String n : new String[]{"twoWay", "transmitRange", "micRange", "micIsMuted", "baseVolumeRange", "deviceVolume", "isPortable", "isTelevision",
+                        "isHighTier", "isTurnedOn", "channel", "minChannelRange", "maxChannelRange", "isBatteryPowered", "hasBattery", "powerDelta", "useDelta",
+                        "headphoneType", "mediaIndex", "mediaType", "mediaItem", "noTransmit"}) {
+                        Object v = g(d, n);
+                        x.append('\t').append(v instanceof Float ? fh(v) : v instanceof Boolean ? b(v) : s(v));
+                    }
+                }
+            }
+            case "MapItem" -> {
+                x.append('\t').append(str(g(it, "mapId")));
+                for (Object sy : (List<?>) g(g(it, "symbols"), "symbols")) {
+                    x.append('\t').append(sy.getClass().getSimpleName());
+                    for (String n : new String[]{"x", "y", "anchorX", "anchorY", "scale", "rotation", "r", "g", "b", "a"}) x.append(',').append(flt(g(sy, n)));
+                    x.append(',').append(b(g(sy, "collide"))).append(b(g(sy, "matchPerspective"))).append(b(g(sy, "applyZoom"))).append(',')
+                        .append(flt(g(sy, "minZoom"))).append(',').append(flt(g(sy, "maxZoom")));
+                    if (sy instanceof zombie.worldMap.symbols.WorldMapTextSymbol) x.append(',').append(str(g(sy, "text"))).append(',').append(b(g(sy, "translated")))
+                        .append(',').append(g(sy, "layerId"));
+                    else x.append(',').append(str(g(sy, "symbolId")));
+                }
+            }
+            default -> { }
+        }
+        if (x.length() > 1) sb.append(x).append('\n');
+        if (it instanceof zombie.inventory.types.InventoryContainer ic) container(sb, ic.getInventory());
+    }
+
+    static String media(short index) {
+        if (index < 0) return String.valueOf(index);
+        return index + "=" + zombie.radio.ZomboidRadio.getInstance().getRecordedMedia().getMediaDataFromIndex(index).getId();
+    }
+
+    // RecordedMedia.load then the Lua registration, as when the game opens the save: the save's ids by index, then the
+    // registered ids it lacks (in the server's order).
+    @SuppressWarnings("unchecked")
+    static void loadRecordedMedia(File save) throws Exception {
+        Object rm = zombie.radio.ZomboidRadio.getInstance().getRecordedMedia();
+        ArrayList<String> idx = (ArrayList<String>) g(rm, "indexes");
+        ByteBuffer bb = ByteBuffer.wrap(Files.readAllBytes(new File(save, "recorded_media.bin").toPath()));
+        bb.getInt();
+        ArrayList<String> ids = new ArrayList<>();
+        for (int i = bb.getInt(); i > 0; i--) ids.add(zombie.GameWindow.ReadString(bb));
+        for (String id : idx) if (!ids.contains(id)) ids.add(id);
+        idx.clear();
+        idx.addAll(ids);
+    }
+
+    static void clothing(StringBuilder x, InventoryItem it) throws Exception {
+        x.append('\t').append(flt(g(it, "wetness"))).append('\t');
+        java.util.Map<?, ?> p = (java.util.Map<?, ?>) g(it, "patches");
+        if (p != null) for (var e : new TreeMap<>(p).entrySet()) {
+            Object v = e.getValue();
+            x.append(e.getKey()).append(':').append(g(v, "tailorLvl")).append('/').append(g(v, "fabricType")).append('/').append(g(v, "scratchDefense")).append('/')
+                .append(g(v, "biteDefense")).append('/').append(b(g(v, "hasHole"))).append('/').append(g(v, "conditionGain")).append(';');
+        }
     }
 
     static void object(StringBuilder sb, IsoGridSquare sq, int index, IsoObject o) throws Exception {
@@ -195,6 +337,7 @@ public class ChunkSaveProbe {
         }
         if (x.length() > 1) sb.append(x).append('\n');
         if (cls.equals("IsoMannequin")) humanVisual(sb, (HumanVisual) g(o, "humanVisual"));
+        if (cls.equals("IsoWorldInventoryObject")) item(sb, ((zombie.iso.objects.IsoWorldInventoryObject) o).getItem());
     }
 
     static void corpse(StringBuilder sb, zombie.iso.objects.IsoDeadBody d) throws Exception {
@@ -221,6 +364,10 @@ public class ChunkSaveProbe {
             SandboxOptions.instance.hoursForWorldItemRemoval.setValue(0.0);
             SandboxOptions.instance.worldItemRemovalList.setValue("");
             SandboxOptions.instance.bloodSplatLifespanDays.setValue(0);
+            loadRecordedMedia(new File(a[1]));
+            // World age 24000.5 h, so that "W" (Food.load on a server: lastAged -1 becomes the world age) is unambiguous.
+            zombie.GameTime.getInstance().setNightsSurvived(1000);
+            zombie.GameTime.getInstance().setTimeOfDay(7.5F);
             var gp = IsoChunk.class.getDeclaredMethod("getFromPool");
             gp.setAccessible(true);
             var ld = IsoChunk.class.getDeclaredMethod("LoadFromDiskOrBuffer", ByteBuffer.class);

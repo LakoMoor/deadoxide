@@ -4,7 +4,7 @@ use super::inventory_item::{InventoryItem, ItemFactory};
 use crate::java_nio::{read_string, ByteBuffer};
 
 /// zombie.inventory.ItemContainer, the loaded part.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ItemContainer {
     pub id: i32,
     pub r#type: String,
@@ -21,11 +21,12 @@ impl ItemContainer {
     pub fn load(
         &mut self,
         b: &mut ByteBuffer,
+        world_version: i32,
         factory: &dyn ItemFactory,
     ) -> Result<Vec<Option<InventoryItem>>, String> {
         self.r#type = read_string(b)?;
         self.explored = b.get()? != 0;
-        let saved = compress_identical_items::load(b, factory)?;
+        let saved = compress_identical_items::load(b, world_version, factory)?;
         self.items = saved.iter().flatten().cloned().collect();
         self.has_been_looted = b.get()? != 0;
         self.capacity = b.get_int()?;

@@ -6,6 +6,7 @@ use crate::java_nio::ByteBuffer;
 /// create; it keeps a null in `savedItems` for each, which the worn/attached item indexes count).
 pub fn load(
     b: &mut ByteBuffer,
+    world_version: i32,
     factory: &dyn ItemFactory,
 ) -> Result<Vec<Option<InventoryItem>>, String> {
     let mut saved: Vec<Option<InventoryItem>> = Vec::new();
@@ -13,7 +14,7 @@ pub fn load(
     for _ in 0..count {
         let identical = b.get_int()?;
         let item_start = b.position();
-        match InventoryItem::load_item(b, factory)? {
+        match InventoryItem::load_item(b, world_version, factory)? {
             None => {
                 let id_list_bytes = if identical > 1 {
                     (identical - 1) as usize * 4
@@ -30,7 +31,7 @@ pub fn load(
                 for i in 0..identical {
                     if i > 0 {
                         b.set_position(item_start)?;
-                        item = InventoryItem::load_item(b, factory)?;
+                        item = InventoryItem::load_item(b, world_version, factory)?;
                     }
                     saved.push(item.clone());
                 }

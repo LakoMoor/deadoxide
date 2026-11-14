@@ -100,7 +100,7 @@ impl IsoDeadBody {
                 capacity: 50,
                 ..ItemContainer::default()
             };
-            c.load(b, items)?;
+            c.load(b, world_version, items)?;
             let n = b.get()?;
             for _ in 0..n.max(0) {
                 let location = read_string(b)?;

@@ -5,6 +5,8 @@ profile/
 tests/out/
 # the game's own files and anything derived from its decompiled code
 media/
+# ...but not the port's own zombie.radio.media package
+!crates/zomboid-engine/src/zombie/radio/media/
 *.jar
 rea_out/
 decompiled/

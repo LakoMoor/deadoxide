@@ -451,7 +451,7 @@ impl IsoObject {
         square_room: Option<usize>,
     ) -> Result<(), String> {
         if matches!(self.kind, ObjectKind::IsoWorldInventoryObject) {
-            return self.load_world_inventory_object(b, ctx);
+            return self.load_world_inventory_object(b, world_version, ctx);
         }
         let mut s = ObjectSave::default();
         // IsoChunk.Fix2x leaves ids alone while a chunk loads (`fixed2x` is set first).
@@ -587,7 +587,7 @@ impl IsoObject {
                     capacity: 50,
                     ..ItemContainer::default()
                 };
-                c.load(b, ctx.items)?;
+                c.load(b, world_version, ctx.items)?;
                 s.containers.push(c);
             }
         }
@@ -807,7 +807,9 @@ impl IsoObject {
                 ClassSave::WaveSignal(d)
             }
             // zombie.iso.objects.IsoMannequin.load
-            ObjectKind::IsoMannequin => ClassSave::Mannequin(Box::new(load_mannequin(b, ctx, s)?)),
+            ObjectKind::IsoMannequin => {
+                ClassSave::Mannequin(Box::new(load_mannequin(b, world_version, ctx, s)?))
+            }
             ObjectKind::IsoJukebox => return Err("loading saved jukeboxes is not ported".into()),
             ObjectKind::IsoObject
             | ObjectKind::IsoBrokenGlass
@@ -821,13 +823,14 @@ impl IsoObject {
     fn load_world_inventory_object<R: JavaRandom>(
         &mut self,
         b: &mut ByteBuffer,
+        world_version: i32,
         ctx: &mut SaveLoadContext<R>,
     ) -> Result<(), String> {
         let (xoff, yoff, zoff) = (b.get_float()?, b.get_float()?, b.get_float()?);
         let offset_x = b.get_float()?;
         let offset_y = b.get_float()?;
         self.sprite = Some(ctx.sprites.create_sprite(None));
-        let item = InventoryItem::load_item(b, ctx.items)?;
+        let item = InventoryItem::load_item(b, world_version, ctx.items)?;
         let mut w = WorldInventorySave {
             xoff,
             yoff,
@@ -922,6 +925,7 @@ fn load_light_switch<R: JavaRandom>(
 /// (a new explored "mannequin" container if the object part had none), emptied and then loaded when saved.
 fn load_mannequin<R: JavaRandom>(
     b: &mut ByteBuffer,
+    world_version: i32,
     ctx: &mut SaveLoadContext<R>,
     s: &mut ObjectSave,
 ) -> Result<MannequinSave, String> {
@@ -946,7 +950,7 @@ fn load_mannequin<R: JavaRandom>(
     let mut worn_items = Vec::new();
     if b.get()? != 0 {
         c.id = b.get_int()?;
-        c.load(b, ctx.items)?;
+        c.load(b, world_version, ctx.items)?;
         let n = b.get()?;
         for _ in 0..n.max(0) {
             let location = read_string(b)?;
