@@ -162,3 +162,28 @@ pub fn hash_map_order(keys_in_insertion_order: &[&str]) -> Vec<usize> {
     order.sort_by_key(|i| bucket(*i)); // stable: insertion order within a bucket
     order
 }
+
+/// java.util.zip.CRC32 over `data` (the IEEE polynomial, reflected, as `getValue()` returns it).
+pub fn crc32(data: &[u8]) -> u32 {
+    let mut crc: u32 = 0xFFFF_FFFF;
+    for &byte in data {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+#[cfg(test)]
+mod crc32_tests {
+    /// The CRC-32 check value of "123456789" (what `java.util.zip.CRC32` returns for it).
+    #[test]
+    fn check_value() {
+        assert_eq!(super::crc32(b"123456789"), 0xCBF4_3926);
+    }
+}

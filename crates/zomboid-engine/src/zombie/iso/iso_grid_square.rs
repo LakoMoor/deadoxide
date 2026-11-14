@@ -1,3 +1,4 @@
+use super::chunk_save::SquareSave;
 use super::iso_directions::IsoDirections;
 use super::iso_object::{IsoObject, ObjectKind};
 use super::sprite::iso_sprite_manager::IsoSpriteManager;
@@ -31,6 +32,8 @@ pub struct IsoGridSquare {
     pub collide_matrix: i32,
     pub path_matrix: i32,
     pub vision_matrix: i32,
+    /// What a chunk save carried for this square beyond the fields above (`None` for squares made from the map).
+    pub save: Option<Box<SquareSave>>,
 }
 
 impl IsoGridSquare {
@@ -51,6 +54,7 @@ impl IsoGridSquare {
             path_matrix: 134217727,
             vision_matrix: 0,
             objects: Vec::new(),
+            save: None,
         }
     }
 

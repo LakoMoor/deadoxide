@@ -2,6 +2,7 @@
 use super::item::{FieldDef, FieldValue as V, Op};
 
 /// Fields set by single-assignment branches, with their declared defaults.
+#[rustfmt::skip]
 pub const FIELDS: [FieldDef; 341] = [
     FieldDef { name: "hitFloorSound", default: V::Str(Some("BatOnFloor")) },
     FieldDef { name: "palettesStart", default: V::Str(Some("")) },
@@ -347,6 +348,7 @@ pub const FIELDS: [FieldDef; 341] = [
 ];
 
 /// Script parameter (lower case) -> (index into FIELDS, how the value is assigned).
+#[rustfmt::skip]
 pub const PARAMS: [(&str, usize, Op); 343] = [
     ("hitfloorsound", 0, Op::Set),
     ("palettesstart", 1, Op::Set),
@@ -694,6 +696,7 @@ pub const PARAMS: [(&str, usize, Op); 343] = [
 ];
 
 /// Parameters whose DoParam branch does more than a single assignment; not handled by this table.
+#[rustfmt::skip]
 pub const COMPLEX: [&str; 44] = [
     "bodylocation",
     "palettes",

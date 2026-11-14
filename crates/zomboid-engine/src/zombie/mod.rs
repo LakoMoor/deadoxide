@@ -1,8 +1,13 @@
 pub mod basements;
+pub mod characters;
 pub mod core;
+pub mod erosion;
 pub mod game_states;
+pub mod inventory;
 pub mod iso;
+pub mod radio;
 pub mod sandbox_options;
 pub mod sandbox_options_table;
 pub mod scripting;
 pub mod util;
+pub mod world;

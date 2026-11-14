@@ -123,6 +123,36 @@ fn sandbox_matches_original() {
     check("sandbox", &[save]);
 }
 
+/// The isolated profile's save the save-loading oracles read (not committed; skipped when absent).
+fn profile_save() -> Option<String> {
+    let save = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../profile/Saves/Sandbox/2026-11-07_22-34-13"
+    );
+    std::path::Path::new(save)
+        .join("map")
+        .exists()
+        .then(|| save.to_string())
+}
+
+#[test]
+fn world_dictionary_matches_original() {
+    let Some(save) = profile_save() else {
+        eprintln!("SKIPPED worlddictionary: the isolated profile's save is not present");
+        return;
+    };
+    check("worlddictionary", &[&format!("{save}/WorldDictionary.bin")]);
+}
+
+#[test]
+fn chunk_save_matches_original() {
+    let Some(save) = profile_save() else {
+        eprintln!("SKIPPED chunksave: the isolated profile's save is not present");
+        return;
+    };
+    check("chunksave", &[&save]);
+}
+
 #[test]
 fn items_match_original() {
     // The field list tools/gen_item_params.py hands to both sides: the table's fields minus aimingMod.

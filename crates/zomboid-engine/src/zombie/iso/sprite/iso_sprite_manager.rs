@@ -78,6 +78,14 @@ impl IsoSpriteManager {
         }
     }
 
+    /// zombie.iso.sprite.IsoSprite.CreateSprite, then LoadSingleTexture(tex): a sprite of its own, in no name or id map.
+    pub fn create_sprite(&mut self, tex: Option<&str>) -> SpriteRef {
+        self.alloc(IsoSprite {
+            texture_name: tex.map(str::to_string),
+            ..IsoSprite::default()
+        })
+    }
+
     /// zombie.iso.sprite.IsoSpriteManager.AddSprite (String)
     pub fn add_sprite(&mut self, tex: &str) -> SpriteRef {
         // IsoSprite.LoadSingleTexture leaves `name` unset; only the texture is known.

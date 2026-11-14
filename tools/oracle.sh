@@ -51,6 +51,7 @@ sel() { [ "$want" = all ] || [ "$want" = "$1" ]; }
 sel tiledefs && run_case tiledefs TileDefsProbe
 sel sandbox && run_case sandbox SandboxProbe "$HERE/profile/Saves/Sandbox/2026-11-07_22-34-13/map_sand.bin"
 sel lotheaders && run_case lotheaders LotHeadersProbe "Muldraugh, KY"
+sel worlddictionary && run_case worlddictionary WorldDictionaryProbe "$HERE/profile/Saves/Sandbox/2026-11-07_22-34-13/WorldDictionary.bin"
 sel lotpack && run_case lotpack LotPackProbe "Muldraugh, KY" 30 43 34 47
 # the whole map (4.2 GB of lotpacks, minutes): sh tools/oracle.sh lotpack-all
 [ "$want" = lotpack-all ] && run_case lotpack LotPackProbe "Muldraugh, KY" 0 0 99 99
@@ -63,6 +64,8 @@ sel collide && server_case collide CollideProbe 1036 1460 1039 1463
 sel entitysprites && server_case entitysprites EntitySpritesProbe
 sel specialcollide && server_case specialcollide SpecialCollideProbe 129 182
 sel basements && server_case basements BasementsProbe 30 43 34 47
+# every chunk of the isolated profile's save, loaded by the original server and by the port
+sel chunksave && server_case chunksave ChunkSaveProbe "$HERE/profile/Saves/Sandbox/2026-11-07_22-34-13"
 sel doortoggle && { cp tests/golden/engine/specialcollide.sha256 target/oracle/sc.keep 2>/dev/null; server_case specialcollide SpecialCollideProbe 129 182 toggle; mv tests/golden/engine/specialcollide.sha256 tests/golden/engine/doortoggle.sha256 2>/dev/null; cp target/oracle/sc.keep tests/golden/engine/specialcollide.sha256 2>/dev/null; }
 sel los && server_case los LosProbe 129 182
 sel losdoors && { server_case los LosProbe 129 182 toggle; cp tests/golden/engine/los.sha256 tests/golden/engine/losdoors.sha256 2>/dev/null; server_case los LosProbe 129 182; }

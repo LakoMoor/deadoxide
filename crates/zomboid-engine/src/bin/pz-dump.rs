@@ -41,6 +41,8 @@ fn main() {
             specialcollide(Path::new(&a[2]), &a[3..], true)
         }
         Some("basements") if a.len() == 7 => basements(Path::new(&a[2]), &a[3..7]),
+        Some("worlddictionary") if a.len() == 4 => worlddictionary(Path::new(&a[3])),
+        Some("chunksave") if a.len() == 4 => chunksave(Path::new(&a[2]), Path::new(&a[3])),
         _ => Err("usage: see the header of pz-dump.rs".into()),
     };
     match r {
@@ -1180,6 +1182,814 @@ pub fn items(root: &Path, fields: &Path) -> Result<String, String> {
             }
         }
         sb.push('\n');
+    }
+    Ok(sb)
+}
+
+/// Every table of a save's WorldDictionary.bin; pairs with WorldDictionaryProbe.java.
+pub fn worlddictionary(path: &Path) -> Result<String, String> {
+    use zomboid_engine::zombie::world::dictionary_data::{DictionaryData, DictionaryInfo};
+    let data = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let d = DictionaryData::load_from_byte_buffer(&data)?;
+    let info = |sb: &mut String, tag: &str, i: &DictionaryInfo| {
+        let _ = writeln!(
+            sb,
+            "{tag}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            i.registry_id,
+            i.full_type,
+            i.module_name,
+            i.name,
+            i.mod_id,
+            i.is_modded,
+            i.exists_as_vanilla,
+            i.obsolete,
+            i.removed,
+            i.mod_overrides
+                .as_ref()
+                .map_or("null".to_string(), |v| v.join(","))
+        );
+    };
+    let mut sb = String::new();
+    let _ = writeln!(
+        sb,
+        "N\t{}\t{}\t{}",
+        d.next_info_id, d.next_object_name_id, d.next_sprite_name_id
+    );
+    for i in d.items.values() {
+        info(&mut sb, "I", i);
+    }
+    let _ = writeln!(sb, "IT\t{}", d.item_types.len());
+    for i in d.entities.values() {
+        info(&mut sb, "E", i);
+    }
+    let _ = writeln!(sb, "ET\t{}", d.entity_types.len());
+    for (k, v) in &d.object_names {
+        let _ = writeln!(sb, "O\t{k}\t{v}");
+    }
+    let _ = writeln!(sb, "OT\t{}", d.object_ids.len());
+    for (k, v) in &d.sprite_names {
+        let _ = writeln!(sb, "S\t{k}\t{v}");
+    }
+    let _ = writeln!(sb, "ST\t{}", d.sprite_ids.len());
+    for r in &d.string_registers {
+        let _ = writeln!(sb, "R\t{}\t{}", r.name, r.next_id);
+        for i in r.by_id.values() {
+            let _ = writeln!(sb, "r\t{}\t{}\t{}", i.registry_id, i.string, i.is_loaded);
+        }
+    }
+    for r in &d.script_registers {
+        let _ = writeln!(sb, "C\t{}\t{}", r.name, r.next_id);
+        for i in r.by_id.values() {
+            let _ = writeln!(
+                sb,
+                "c\t{}\t{}\t{}\t{}",
+                i.registry_id, i.version, i.name, i.is_loaded
+            );
+        }
+    }
+    Ok(sb)
+}
+
+mod save_dump {
+    use std::fmt::Write as _;
+
+    use zomboid_engine::se::krka::kahlua::j2se::kahlua_table_impl::{KahluaTable, LuaValue};
+    use zomboid_engine::zombie::core::skinnedmodel::visual::human_visual::HumanVisual;
+    use zomboid_engine::zombie::inventory::item_container::ItemContainer;
+    use zomboid_engine::zombie::iso::chunk_save::{ClassSave, ObjectSave};
+    use zomboid_engine::zombie::iso::iso_chunk::IsoChunk;
+    use zomboid_engine::zombie::iso::iso_grid_square::IsoGridSquare;
+    use zomboid_engine::zombie::iso::iso_object::{IsoObject, ObjectKind};
+    use zomboid_engine::zombie::iso::objects::iso_dead_body::IsoDeadBody;
+    use zomboid_engine::zombie::iso::sprite::iso_sprite_manager::{IsoSpriteManager, SpriteRef};
+
+    /// `Integer.toHexString(Float.floatToRawIntBits(f))`
+    pub fn fh(f: f32) -> String {
+        format!("{:x}", f.to_bits())
+    }
+    fn dh(d: f64) -> String {
+        format!("{:x}", d.to_bits())
+    }
+    fn b(v: bool) -> char {
+        if v {
+            '1'
+        } else {
+            '0'
+        }
+    }
+    fn s(v: Option<&str>) -> &str {
+        v.unwrap_or("null")
+    }
+    /// `sp == null ? "-" : String.valueOf(sp.name)`
+    fn sn(sm: &IsoSpriteManager, sp: Option<SpriteRef>) -> String {
+        sp.map_or("-".to_string(), |r| {
+            s(sm.sprite(r).name.as_deref()).to_string()
+        })
+    }
+    fn lua(v: &LuaValue) -> String {
+        match v {
+            LuaValue::String(x) => format!("s:{x}"),
+            LuaValue::Number(x) => format!("n:{}", dh(*x)),
+            LuaValue::Boolean(x) => format!("b:{x}"),
+            LuaValue::Table(t) => table(t),
+        }
+    }
+    fn table(t: &KahluaTable) -> String {
+        let mut l: Vec<String> = t
+            .entries
+            .iter()
+            .map(|(k, v)| format!("{}={}", lua(k), lua(v)))
+            .collect();
+        l.sort();
+        format!("{{{}}}", l.join(","))
+    }
+    /// `hasModData() ? lua(getModData()) : "-"`
+    fn mod_data(t: Option<&KahluaTable>) -> String {
+        t.filter(|t| !t.entries.is_empty())
+            .map_or("-".to_string(), table)
+    }
+    fn color(c: Option<[i32; 3]>) -> String {
+        c.map_or("null".to_string(), |c| {
+            c.map(|v| fh(v as f32 / 255.0)).join(",")
+        })
+    }
+    fn bytes(a: Option<&[i8]>) -> String {
+        a.map_or("null".to_string(), |a| {
+            a.iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+    }
+    fn human_visual(sb: &mut String, v: &HumanVisual) {
+        let white = Some([255, 255, 255]);
+        let _ = writeln!(
+            sb,
+            "HV\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            color(v.skin_color.or(white)),
+            v.skin_texture,
+            s(v.skin_texture_name.as_deref()),
+            v.zombie_rot_stage,
+            color(v.hair_color),
+            color(v.beard_color),
+            color(v.natural_hair_color),
+            color(v.natural_beard_color),
+            s(v.hair_model.as_deref()),
+            s(v.beard_model.as_deref()),
+            v.body_hair,
+            bytes(Some(&v.blood)),
+            bytes(Some(&v.dirt)),
+            bytes(Some(&v.holes)),
+            s(v.non_attached_hair.as_deref())
+        );
+        for iv in &v.body_visuals {
+            let _ = write!(
+                sb,
+                "IV\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                iv.full_type,
+                iv.alternate_model_name,
+                iv.clothing_item_name,
+                color(iv.tint),
+                iv.base_texture,
+                iv.texture_choice,
+                fh(iv.hue),
+                s(iv.decal.as_deref())
+            );
+            for a in [
+                &iv.blood,
+                &iv.dirt,
+                &iv.holes,
+                &iv.basic_patches,
+                &iv.denim_patches,
+                &iv.leather_patches,
+            ] {
+                let _ = write!(sb, "\t{}", bytes(a.as_ref().map(|a| &a[..])));
+            }
+            sb.push('\n');
+        }
+    }
+    fn container(sb: &mut String, c: &ItemContainer) {
+        let _ = write!(
+            sb,
+            "C\t{}\t{}\t{}\t{}",
+            c.r#type,
+            b(c.explored),
+            b(c.has_been_looted),
+            c.capacity
+        );
+        for it in &c.items {
+            let _ = write!(sb, "\t{}:{}", it.full_type, it.id);
+        }
+        sb.push('\n');
+    }
+
+    fn object(
+        sb: &mut String,
+        sm: &IsoSpriteManager,
+        sq: &IsoGridSquare,
+        index: usize,
+        o: &IsoObject,
+    ) {
+        let default = ObjectSave::default();
+        let os = o.save.as_deref().unwrap_or(&default);
+        let world = sq
+            .save
+            .as_ref()
+            .is_some_and(|s| s.world_objects.contains(&index));
+        let key_id = match &os.class {
+            ClassSave::Door { key_id, .. } => *key_id,
+            _ => os.key_id,
+        };
+        let mut comps: Vec<String> = os.components.iter().map(|(id, _)| id.to_string()).collect();
+        comps.sort_by_key(|c| c.parse::<i32>().unwrap_or(0));
+        let _ = writeln!(
+            sb,
+            "O\t{index}\t{}\t{}\t{}\t{}\t{}{}\t{}{}{}{}{}\t{}\t{key_id}\t{}\t{}\t{}\t{}\t{}\t[{}]\t{}",
+            o.kind.class_name(),
+            sn(sm, o.sprite),
+            s(os.name.as_deref()),
+            s(os.sprite_name.as_deref()),
+            b(o.special),
+            b(world),
+            b(o.outline_on_mouseover),
+            b(os.do_not_sync),
+            b(os.special_tooltip),
+            b(os.uses_external_water_source),
+            b(os.moved_thumpable),
+            fh(o.render_y_offset),
+            os.custom_color.map_or("-".to_string(), |c| c.map(fh).join(",")),
+            os.sheet_rope_health.map_or("-".to_string(), fh),
+            sn(sm, os.overlay_sprite),
+            os.overlay_sprite_color.map_or("-".to_string(), |c| c.map(fh).join(",")),
+            s(os.sprite_model_name.as_deref()),
+            comps.join(", "),
+            mod_data(os.mod_data.as_ref())
+        );
+        for (spr, a) in o.attached_anim_sprite.iter().flatten().zip(&os.attached) {
+            let d = a.data.unwrap_or([0.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
+            let _ = writeln!(
+                sb,
+                "A\t{}\t{}{}{}\t{},{},{}\t{},{},{}\t{}",
+                sn(sm, Some(*spr)),
+                b(a.flip),
+                b(a.copy_target_alpha),
+                b(a.multiply_object_alpha),
+                fh(d[0]),
+                fh(d[1]),
+                fh(d[2]),
+                fh(d[3]),
+                fh(d[4]),
+                fh(d[5]),
+                fh(a.alpha.unwrap_or(1.0))
+            );
+        }
+        for w in &os.wall_blood_splats {
+            let _ = writeln!(sb, "W\t{}", sn(sm, w.sprite));
+        }
+        for c in &os.containers {
+            container(sb, c);
+        }
+        let mut x = String::from("X");
+        match (&o.kind, &os.class) {
+            (
+                ObjectKind::IsoDoor(d),
+                ClassSave::Door {
+                    health,
+                    max_health,
+                    key_id,
+                    has_curtain,
+                    curtain_open,
+                    curtain_inside,
+                },
+            ) => {
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{}\t{health}\t{max_health}\t{}\t{}\t{key_id}\t{}\t{}\t{}\t{}",
+                    b(d.open),
+                    b(d.locked),
+                    b(d.north),
+                    sn(sm, d.closed_sprite),
+                    sn(sm, d.open_sprite),
+                    b(d.locked_by_key),
+                    b(*has_curtain),
+                    b(*curtain_open),
+                    b(*curtain_inside)
+                );
+            }
+            (ObjectKind::IsoWindow(w), ClassSave::Window { health, max_health }) => {
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{health}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{max_health}",
+                    b(w.open),
+                    b(w.north),
+                    b(w.locked),
+                    b(w.perma_locked),
+                    b(w.smashed),
+                    b(w.glass_removed),
+                    sn(sm, w.open_sprite),
+                    sn(sm, w.closed_sprite),
+                    sn(sm, w.smashed_sprite),
+                    sn(sm, w.glass_removed_sprite)
+                );
+            }
+            (
+                ObjectKind::IsoCurtain(c),
+                ClassSave::Curtain {
+                    health,
+                    barricade_strength,
+                },
+            ) => {
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{health}\t{barricade_strength}\t{}\t{}",
+                    b(c.open),
+                    b(c.north),
+                    sn(sm, c.closed_sprite),
+                    sn(sm, c.open_sprite)
+                );
+            }
+            (ObjectKind::IsoWindowFrame { north }, _) => {
+                let _ = write!(x, "\t{}", b(*north));
+            }
+            (ObjectKind::IsoTree(t), _) => {
+                let _ = write!(x, "\t{}\t{}\t{}", t.size, t.log_yield, t.damage);
+            }
+            (_, ClassSave::LightSwitch(l)) => {
+                let activated = if l.activated_from_room {
+                    "?".to_string()
+                } else {
+                    b(l.activated).to_string()
+                };
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{activated}\t{}\t{}\t{}\t{}",
+                    b(l.light_room),
+                    l.room_id,
+                    b(l.can_be_modified),
+                    b(l.use_battery),
+                    b(l.has_battery),
+                    s(l.bulb_item.as_deref())
+                );
+                for f in [l.power, l.delta, l.primary[0], l.primary[1], l.primary[2]] {
+                    let _ = write!(x, "\t{}", fh(f));
+                }
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{}",
+                    l.last_minute_stamp,
+                    l.bulb_burn_minutes,
+                    b(l.street_light)
+                );
+            }
+            (
+                ObjectKind::IsoBarbecue {
+                    has_propane_tank,
+                    fuel_amount_minutes,
+                },
+                ClassSave::Barbecue {
+                    lit,
+                    last_update_time,
+                    minutes_since_extinguished,
+                    normal,
+                    no_tank,
+                },
+            ) => {
+                let _ = write!(
+                    x,
+                    "\t{}\t{fuel_amount_minutes}\t{}\t{}\t{minutes_since_extinguished}\t{}\t{}",
+                    b(*has_propane_tank),
+                    b(*lit),
+                    fh(*last_update_time),
+                    sn(sm, *normal),
+                    sn(sm, *no_tank)
+                );
+            }
+            (
+                _,
+                ClassSave::Fireplace {
+                    fuel_amount_minutes,
+                    lit,
+                    last_update_time,
+                    minutes_since_extinguished,
+                },
+            ) => {
+                let _ = write!(
+                    x,
+                    "\t{fuel_amount_minutes}\t{}\t{}\t{minutes_since_extinguished}",
+                    b(*lit),
+                    fh(*last_update_time)
+                );
+            }
+            (
+                _,
+                ClassSave::Stove {
+                    activated,
+                    seconds_timer,
+                    max_temperature,
+                    first_turn_on,
+                    broken,
+                },
+            ) => {
+                let _ = write!(
+                    x,
+                    "\t{}\t{seconds_timer}\t{}\t{}\t{}",
+                    b(*activated),
+                    fh(*max_temperature),
+                    b(*first_turn_on),
+                    b(*broken)
+                );
+            }
+            (
+                _,
+                ClassSave::Washer {
+                    activated,
+                    last_update,
+                },
+            ) => {
+                let _ = write!(x, "\t{}\t{}", b(*activated), fh(*last_update));
+            }
+            (_, ClassSave::Dryer { activated }) => {
+                let _ = write!(x, "\t{}", b(*activated));
+            }
+            (
+                _,
+                ClassSave::WasherDryer {
+                    dryer,
+                    washer_activated,
+                    washer_last_update,
+                    dryer_activated,
+                },
+            ) => {
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{}\t{}",
+                    b(*dryer),
+                    b(*washer_activated),
+                    fh(*washer_last_update),
+                    b(*dryer_activated)
+                );
+            }
+            (_, ClassSave::WaveSignal(d)) => {
+                let d = d.clone().unwrap_or_default();
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                    d.device_name,
+                    b(d.two_way),
+                    d.transmit_range,
+                    d.mic_range,
+                    b(d.mic_is_muted),
+                    fh(d.base_volume_range),
+                    fh(d.device_volume),
+                    b(d.is_portable),
+                    b(d.is_television),
+                    b(d.is_high_tier),
+                    b(d.is_turned_on),
+                    d.channel,
+                    d.min_channel_range,
+                    d.max_channel_range,
+                    b(d.is_battery_powered),
+                    b(d.has_battery),
+                    fh(d.power_delta),
+                    fh(d.use_delta),
+                    d.headphone_type,
+                    d.media_index,
+                    d.media_type,
+                    s(d.media_item.as_deref()),
+                    b(d.no_transmit)
+                );
+                let p = d.presets.unwrap_or_default();
+                let _ = write!(
+                    x,
+                    "\t{}",
+                    if p.max_presets == 0 && p.presets.is_empty() {
+                        10
+                    } else {
+                        p.max_presets
+                    }
+                );
+                for (name, freq) in &p.presets {
+                    let _ = write!(x, "\t{name}:{freq}");
+                }
+            }
+            (_, ClassSave::Mannequin(m)) => {
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                    m.dir & 7,
+                    b(m.init),
+                    b(m.female),
+                    b(m.zombie),
+                    b(m.skeleton),
+                    m.mannequin_script_name,
+                    m.pose
+                );
+            }
+            (_, ClassSave::WorldInventory(w)) => {
+                let (ft, id) = w
+                    .item
+                    .as_ref()
+                    .map_or(("null".to_string(), 0), |i| (i.full_type.clone(), i.id));
+                let _ = write!(
+                    x,
+                    "\t{}\t{}\t{}\t{ft}:{id}\t{}\t{}\t{}",
+                    fh(w.xoff),
+                    fh(w.yoff),
+                    fh(w.zoff),
+                    dh(w.drop_time),
+                    b(w.ignore_remove_sandbox),
+                    b(w.extended_placement)
+                );
+            }
+            _ => {}
+        }
+        if x.len() > 1 {
+            sb.push_str(&x);
+            sb.push('\n');
+        }
+        if let ClassSave::Mannequin(m) = &os.class {
+            human_visual(sb, &m.human_visual);
+        }
+    }
+
+    fn corpse(sb: &mut String, d: &IsoDeadBody) {
+        let _ = write!(
+            sb,
+            "D\t{},{},{}\t{}{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            fh(d.x),
+            fh(d.y),
+            fh(d.z),
+            b(d.female),
+            b(d.was_zombie),
+            d.object_id.0,
+            d.persistent_outfit_id,
+            fh(d.death_time),
+            fh(d.reanimate_time),
+            b(d.fall_on_front),
+            b(d.killed_by_fall),
+            b(d.was_skeleton),
+            fh(d.angle),
+            d.zombie_rot_stage_at_death,
+            d.animal_rot_stage_at_death,
+            s(d.rotten_texture.as_deref()),
+            s(d.skel_inv_icon.as_deref())
+        );
+        let _ = writeln!(
+            sb,
+            "\t{}\t{}\t{}\t{}",
+            b(d.crawling),
+            b(d.fake_dead),
+            b(d.ragdoll_fall),
+            mod_data(d.mod_data.as_ref())
+        );
+        if let Some(desc) = &d.desc {
+            let _ = writeln!(
+                sb,
+                "SD\t{}\t{}\t{}\t{}\t{}\t[{}]\t{}\t{}\t{}",
+                desc.id,
+                desc.forename,
+                desc.surname,
+                desc.torso,
+                b(desc.female),
+                desc.extra.join(", "),
+                desc.voice_prefix,
+                fh(desc.voice_pitch),
+                desc.voice_type
+            );
+        }
+        human_visual(sb, &d.human_visual);
+        if let Some(c) = &d.container {
+            container(sb, c);
+        }
+    }
+
+    /// The text ChunkSaveProbe.java prints for one loaded chunk.
+    pub fn chunk(sb: &mut String, sm: &IsoSpriteManager, ch: &IsoChunk) {
+        let Some(c) = ch.save.as_deref() else { return };
+        let _ = write!(
+            sb,
+            "K\t{}\t{}\t{}\t{}\t{}{}",
+            ch.wx,
+            ch.wy,
+            ch.get_min_level(),
+            ch.get_max_level(),
+            b(c.blending_done_full),
+            b(c.blending_done_partial)
+        );
+        for f in c.blending_modified {
+            sb.push(b(f));
+        }
+        let _ = write!(
+            sb,
+            "\t{}\t{}",
+            bytes(Some(&c.blending_depth)),
+            b(c.attachments_done_full)
+        );
+        for f in c.attachments_state {
+            sb.push(b(f));
+        }
+        let e = &c.erosion;
+        let _ = write!(
+            sb,
+            "\t{}\t{},{},{},{},{},{}\t{}\t{}",
+            c.attachments_partial
+                .as_ref()
+                .map_or("-".to_string(), |v| v.len().to_string()),
+            b(e.init),
+            e.e_tick_stamp,
+            e.epoch,
+            fh(e.moisture),
+            fh(e.minerals),
+            e.soil,
+            c.generators_touching_this_chunk
+                .as_ref()
+                .map_or("-".to_string(), |v| v.len().to_string()),
+            c.loot_respawn_hour
+        );
+        for (i, r) in c.spawned_rooms.iter().enumerate() {
+            let _ = write!(sb, "{}{r}", if i == 0 { '\t' } else { ',' });
+        }
+        sb.push('\n');
+        for s in &c.floor_blood_splats {
+            let _ = writeln!(
+                sb,
+                "B\t{},{},{}\t{}\t{}",
+                fh(s.x),
+                fh(s.y),
+                fh(s.z),
+                s.r#type,
+                s.index
+            );
+        }
+        for z in ch.get_min_level()..=ch.get_max_level() {
+            for i in 0..64 {
+                let Some(sq) = ch.get_grid_square(i % 8, i / 8, z) else {
+                    continue;
+                };
+                let default = Default::default();
+                let ss = sq.save.as_deref().unwrap_or(&default);
+                let es = &ss.erosion;
+                let _ = write!(
+                    sb,
+                    "Q\t{}\t{}\t{}\t{}\t{}{}\t{}{}{}{}\t{}{},{},{},{}",
+                    sq.x,
+                    sq.y,
+                    sq.z,
+                    sq.room_id,
+                    b(sq.room_id != -1 && sq.room.is_some()),
+                    b(sq.roof_hide_building.is_some()),
+                    b(ss.overlay_done),
+                    b(sq.have_roof),
+                    b(ss.burnt_out),
+                    b(ss.have_sheet_rope),
+                    b(es.init),
+                    b(es.do_nothing),
+                    es.noise_main_byte,
+                    es.soil,
+                    es.magic_num_byte
+                );
+                for r in &es.regions {
+                    let _ = write!(
+                        sb,
+                        ",{}/{}/{}{}{}/{}/{}/{}",
+                        r.region_id,
+                        r.category_id,
+                        b(r.do_nothing),
+                        b(r.has_spawned),
+                        b(r.disp_bloom),
+                        r.stage,
+                        r.disp_season,
+                        r.game_obj
+                    );
+                }
+                let _ = writeln!(sb, "\t{}", mod_data(ss.mod_data.as_ref()));
+                for (oi, o) in sq.objects.iter().enumerate() {
+                    object(sb, sm, sq, oi, o);
+                }
+                for d in &ss.static_moving_objects {
+                    corpse(sb, d);
+                }
+            }
+        }
+    }
+}
+
+/// Every chunk of a save loaded through the port of IsoChunk.LoadFromDiskOrBuffer, in the world the oracle server
+/// runs (seeded basements merged into the meta grid); pairs with ChunkSaveProbe.java.
+pub fn chunksave(root: &Path, save: &Path) -> Result<String, String> {
+    use zomboid_engine::zombie::basements::Basements;
+    use zomboid_engine::zombie::inventory::inventory_item::ItemFactory;
+    use zomboid_engine::zombie::iso::chunk_save::SaveLoadContext;
+    use zomboid_engine::zombie::scripting::item::Value;
+    use zomboid_engine::zombie::scripting::script_manager::ScriptManager;
+    use zomboid_engine::zombie::world::dictionary_data::DictionaryData;
+
+    /// InventoryItemFactory.CreateItem(short): a valid dictionary entry whose item script exists.
+    struct Factory<'a> {
+        dictionary: &'a DictionaryData,
+        scripts: std::collections::HashMap<String, bool>,
+    }
+    impl ItemFactory for Factory<'_> {
+        fn create_item(&self, registry_id: i16) -> Option<String> {
+            let info = self.dictionary.items.get(&registry_id)?;
+            if info.obsolete || info.removed {
+                return None;
+            }
+            let script = if info.full_type.starts_with("Moveables.") {
+                "Moveables.Moveable"
+            } else {
+                info.full_type.as_str()
+            };
+            self.scripts
+                .contains_key(script)
+                .then(|| info.full_type.clone())
+        }
+        fn is_obsolete(&self, full_type: &str) -> bool {
+            self.scripts.get(full_type).copied().unwrap_or(false)
+        }
+    }
+
+    let media = root.join("media");
+    let (mut sm, alias, mut defs) = load_tile_definitions(root)?;
+    sm.add_sprite("media/ui/missing-tile.png");
+    defs.loaded_tile_definitions(&mut sm, &alias, &|_| false)?;
+    let mut g = IsoMetaGrid::default();
+    let dirs = IsoMetaGrid::lot_directories(&media, "Muldraugh, KY");
+    g.create_step1(&media, &dirs, (-250, -250, 250, 250))?;
+    for e in g.load_all_cells(&mut |_| 1, &mut |_, _| Vec::new()) {
+        eprintln!("{e}");
+    }
+    let alarm = AlarmSettings {
+        last_stand: false,
+        power_grid_exists: true,
+        alarm: 1,
+        alarm_decay: 1,
+    };
+    g.create_step2(&alarm, &mut |_| 1, &mut |a, _| a);
+    let seed = java::string_hash_code("DeadOxideOracle") as i64;
+    Basements::before_load_meta_grid(&media, &mut g, &dirs, seed)?;
+    let dict_path = save.join("WorldDictionary.bin");
+    let dictionary = DictionaryData::load_from_byte_buffer(
+        &std::fs::read(&dict_path).map_err(|e| format!("{}: {e}", dict_path.display()))?,
+    )?;
+    let scripts = ScriptManager::load(root)?;
+    let factory = Factory {
+        dictionary: &dictionary,
+        scripts: scripts
+            .items
+            .iter()
+            .map(|i| {
+                (
+                    i.full_name(),
+                    matches!(i.get("obsolete"), Some(Value::Bool(true))),
+                )
+            })
+            .collect(),
+    };
+    let mut files = std::collections::BTreeMap::new();
+    let map = save.join("map");
+    for xd in std::fs::read_dir(&map).map_err(|e| format!("{}: {e}", map.display()))? {
+        let xd = xd.map_err(|e| e.to_string())?.path();
+        let Some(wx) = xd
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.parse::<i32>().ok())
+        else {
+            continue;
+        };
+        for yf in std::fs::read_dir(&xd).map_err(|e| format!("{}: {e}", xd.display()))? {
+            let yf = yf.map_err(|e| e.to_string())?.path();
+            let Some(wy) = yf
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|n| n.strip_suffix(".bin"))
+                .and_then(|n| n.parse::<i32>().ok())
+            else {
+                continue;
+            };
+            files.insert((wx, wy), yf);
+        }
+    }
+    let mut rand = RandAbstract::new(java::Random::new(0));
+    let mut sb = String::new();
+    for ((wx, wy), path) in files {
+        let data = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let has_lot_header = g.get_header(wx * 8 / 256, wy * 8 / 256).is_some();
+        let mut ctx = SaveLoadContext {
+            sprites: &mut sm,
+            alias: &alias,
+            dictionary: &dictionary,
+            items: &factory,
+            meta_grid: &mut g,
+            rand: &mut rand,
+            has_lot_header,
+        };
+        match IsoChunk::load_from_disk_or_buffer(&data, wx, wy, &mut ctx) {
+            Ok(ch) => save_dump::chunk(&mut sb, ctx.sprites, &ch),
+            Err(e) => {
+                let _ = writeln!(sb, "K\t{wx}\t{wy}\tFAIL\t{e}");
+            }
+        }
     }
     Ok(sb)
 }

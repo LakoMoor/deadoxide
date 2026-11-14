@@ -1,10 +1,11 @@
+use super::chunk_save::ObjectSave;
 use super::sprite::iso_sprite_manager::{IsoSpriteManager, SpriteRef};
 use super::sprite_details::iso_flag_type::IsoFlagType;
 use super::sprite_details::iso_object_type::IsoObjectType;
 use crate::zombie::core::tile_property_alias_map::TilePropertyAliasMap;
 
 /// zombie.iso.objects.IsoDoor: the fields set when the map loader creates a door.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct IsoDoor {
     pub open: bool,
     pub north: bool,
@@ -14,8 +15,9 @@ pub struct IsoDoor {
     pub open_sprite: Option<SpriteRef>,
 }
 
-/// zombie.iso.objects.IsoWindow: the fields set when the map loader creates a window.
-#[derive(Clone, Debug, PartialEq)]
+/// zombie.iso.objects.IsoWindow: the fields set when the map loader creates a window. `smashed` is the original's
+/// `destroyed` (`isSmashed()`).
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct IsoWindow {
     pub north: bool,
     pub open: bool,
@@ -30,7 +32,7 @@ pub struct IsoWindow {
 }
 
 /// zombie.iso.objects.IsoCurtain
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct IsoCurtain {
     pub north: bool,
     pub open: bool,
@@ -44,6 +46,17 @@ pub struct IsoTree {
     pub size: i32,
     pub log_yield: i32,
     pub damage: i32,
+}
+
+impl Default for IsoTree {
+    /// The field initialisers of zombie.iso.objects.IsoTree.
+    fn default() -> Self {
+        IsoTree {
+            size: 4,
+            log_yield: 1,
+            damage: 500,
+        }
+    }
 }
 
 /// The Java class of a world object. Subclass state that the loader does not touch is not modelled yet.
@@ -72,6 +85,9 @@ pub enum ObjectKind {
     IsoTelevision,
     IsoMannequin,
     IsoTree(IsoTree),
+    /// zombie.iso.objects.IsoWorldInventoryObject: an item lying on the floor (state in `IsoObject::save`).
+    IsoWorldInventoryObject,
+    IsoBrokenGlass,
 }
 
 impl ObjectKind {
@@ -95,6 +111,8 @@ impl ObjectKind {
             ObjectKind::IsoTelevision => "IsoTelevision",
             ObjectKind::IsoMannequin => "IsoMannequin",
             ObjectKind::IsoTree(_) => "IsoTree",
+            ObjectKind::IsoWorldInventoryObject => "IsoWorldInventoryObject",
+            ObjectKind::IsoBrokenGlass => "IsoBrokenGlass",
         }
     }
 }
@@ -117,6 +135,8 @@ pub struct IsoObject {
     pub reroute_collide: bool,
     /// The object is also in `IsoGridSquare.specialObjects`.
     pub special: bool,
+    /// What a save loaded for this object beyond the fields above (`None` for objects the map loader made).
+    pub save: Option<Box<ObjectSave>>,
 }
 
 impl IsoObject {
@@ -133,6 +153,7 @@ impl IsoObject {
             outline_on_mouseover: false,
             reroute_collide: false,
             special: false,
+            save: None,
         }
     }
     /// zombie.iso.objects.IsoDoor.ToggleDoorSilent: flips a door between open and closed and shows the matching
